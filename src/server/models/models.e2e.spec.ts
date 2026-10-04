@@ -1,5 +1,46 @@
 import { expect, test } from '../../../tests/browser.js';
 
+test('completes provider sign-in without leaving settings', async ({ page, clef }) => {
+  await clef.setup();
+  await page.goto(clef.url);
+  await page
+    .getByRole('button', {
+      name: 'Settings',
+      exact: true,
+    })
+    .click();
+  const dialog = page.getByRole('dialog', {
+    name: 'Settings',
+  });
+  await dialog
+    .getByRole('button', {
+      name: 'Connections',
+      exact: true,
+    })
+    .click();
+  await dialog
+    .getByRole('button', {
+      name: 'OpenAI',
+      exact: true,
+    })
+    .click();
+  const signIn = dialog.getByRole('button', {
+    name: 'Sign in with ChatGPT',
+    exact: true,
+  });
+  await signIn.click();
+  await dialog.getByLabel('Sign-in response').fill('test-callback');
+  await dialog
+    .getByRole('button', {
+      name: 'Complete sign-in',
+      exact: true,
+    })
+    .click();
+  await expect(dialog.getByRole('status')).toHaveText('Connection saved.');
+  await expect(signIn).toBeEnabled();
+  await expect(dialog.getByLabel('Sign-in response')).toHaveCount(0);
+});
+
 test('applies model changes to the next message and replaces a provider connection', async ({
   page,
   clef,
@@ -33,6 +74,19 @@ test('applies model changes to the next message and replaces a provider connecti
       name: 'Save defaults',
     })
     .click();
+  const dialog = page.getByRole('dialog', {
+    name: 'Settings',
+  });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('status')).toHaveText(
+    'Defaults saved. Applies to your next message.',
+  );
+  await dialog
+    .getByRole('button', {
+      name: 'Close',
+      exact: true,
+    })
+    .click();
   await expect(
     page.getByText('test-model', {
       exact: true,
@@ -59,13 +113,15 @@ test('applies model changes to the next message and replaces a provider connecti
       name: 'Settings',
     })
     .click();
-  await page
-    .getByText('Manage connections', {
+  await dialog
+    .getByRole('button', {
+      name: 'Manage connections',
       exact: true,
     })
     .click();
-  await page
-    .getByText('Use an API key instead', {
+  await dialog
+    .getByRole('button', {
+      name: 'OpenAI',
       exact: true,
     })
     .click();
@@ -79,11 +135,44 @@ test('applies model changes to the next message and replaces a provider connecti
       name: 'Connect provider',
     })
     .click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('status')).toHaveText('Connection saved.');
   await expect(
-    page.getByRole('dialog', {
-      name: 'Settings',
+    page.getByLabel('API key', {
+      exact: true,
     }),
-  ).toHaveCount(0);
+  ).toHaveValue('');
+  await dialog
+    .getByRole('button', {
+      name: 'All connections',
+      exact: true,
+    })
+    .click();
+  await expect(
+    dialog.getByRole('button', {
+      name: 'OpenAI',
+      exact: true,
+    }),
+  ).toHaveAccessibleDescription('Connected');
+  await dialog
+    .getByRole('navigation')
+    .getByRole('button', {
+      name: 'Default model',
+      exact: true,
+    })
+    .click();
+  await expect(
+    dialog.getByRole('combobox', {
+      name: 'Model',
+      exact: true,
+    }),
+  ).toHaveText('Second model');
+  await dialog
+    .getByRole('button', {
+      name: 'Close',
+      exact: true,
+    })
+    .click();
   await page.reload();
   await expect(
     page.getByText('second-model', {

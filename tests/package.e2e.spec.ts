@@ -97,6 +97,12 @@ test('installs without scripts, runs after CLI exit, and preserves the web accou
       name: 'Create account',
     })
     .click();
+  await page
+    .getByRole('button', {
+      name: 'OpenAI',
+      exact: true,
+    })
+    .click();
   await expect(
     page.getByRole('button', {
       name: 'Sign in with ChatGPT',
@@ -188,6 +194,12 @@ test('installs without scripts, runs after CLI exit, and preserves the web accou
   await page
     .getByRole('button', {
       name: 'Sign in',
+      exact: true,
+    })
+    .click();
+  await page
+    .getByRole('button', {
+      name: 'OpenAI',
       exact: true,
     })
     .click();

@@ -32,15 +32,21 @@ These are great products. Useful AI personal assistants are effectively operatin
 
 Those projects are awesome. So awesome that they are overwhelming! At least to me. I am aiming to build something that feels as approachable as the frontier labs products but without all the perverse incentives.
 
+## Settings
+
+Open **Settings** from chat. Use the grouped navigation to select **Default model**, **Connections**, **Tools**, or **Account**. Save changes without closing the dialog. Use Close or Escape to return to chat.
+
+Under **Connections**, select a provider to view its status and connection form. OpenAI offers ChatGPT sign-in and API-key entry. These methods share one OpenAI connection; connecting either method replaces the current one. ChatGPT subscription access and OpenAI API billing are separate.
+
 ## Local models with Ollama
 
-In setup or **Settings > Manage connections**, select **Use local Ollama**. Enter the server URL, for example `http://localhost:11434` or `http://macstudio.local:11434`. Use the server root URL, without `/v1`. No API key is needed. Clef does not install Ollama or download models.
+In setup or **Settings > Connections**, select **Ollama**. Enter the server URL, for example `http://localhost:11434` or `http://macstudio.local:11434`. Use the server root URL, without `/v1`. No API key is needed. Clef does not install Ollama or download models.
 
 The **Clef server**, not your browser, must be able to reach this URL. `localhost` means the computer that runs Clef. The selected Ollama server receives your conversation. Use unauthenticated HTTP only on a trusted network, never on a public endpoint. The internal OpenAI-client placeholder is not authentication and does not secure Ollama.
 
 Clef discovers installed local chat models. Embedding models and cloud aliases are not offered. Use an Ollama version that reports `thinking.values` from `/api/show` for thinking models. Only supported Clef thinking levels are offered. For boolean-only thinking controls, `medium` turns thinking on and `off` turns it off.
 
-Choose a model and thinking level in **Settings > Models > Default**. Changed defaults apply only to new conversations. The server URL and defaults survive restarts. Changing the server URL changes the destination for all Ollama conversations. Connect again to refresh the installed model list. Clef also discovers models at startup; a discovery failure keeps your settings and is shown in Settings. Clef never switches providers to recover from a failure.
+Choose a model and thinking level in **Settings > Default model**. Changed defaults apply to your next message. An active reply keeps its current model. The server URL and defaults survive restarts. Changing the server URL changes the destination for all Ollama conversations. Connect again to refresh the installed model list. Clef also discovers models at startup; a discovery failure keeps your settings and is shown in Settings. Clef never switches providers to recover from a failure.
 
 ## Features
 

@@ -29,6 +29,8 @@ export function ProviderLogin({ refresh }: { refresh: () => Promise<void> }) {
       setLogin(state);
       if (state.state === 'done') {
         await refresh();
+        setLogin(undefined);
+        setAnswer('');
         return;
       }
       if (state.state === 'failed') return;
