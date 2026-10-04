@@ -1,5 +1,4 @@
 import type { FastifyInstance } from 'fastify';
-import { z } from 'zod';
 import type { Agent } from '../agent/index.js';
 import type { Models } from '../models/index.js';
 import type { Permissions } from '../permissions/index.js';
@@ -13,49 +12,45 @@ export function registerMessageRoutes(
   models: Models,
   permissions: Permissions,
 ): void {
-  const idFrom = (params: unknown) =>
-    z
-      .object({
-        id: z.string().max(80),
-      })
-      .parse(params).id;
-  app.get('/api/conversations', async () => agent.list());
-  app.post('/api/conversations', async () => agent.create(await models.defaults()));
-  app.get('/api/conversations/:id', async (request) => {
-    const id = idFrom(request.params);
+  app.get('/api/conversation', async () => {
+    const conversation = await agent.open(await models.defaults());
+
     return {
-      ...(await agent.snapshot(id)),
-      permissions: permissions.pending(id),
+      ...(await agent.snapshot()),
+      permissions: permissions.pending(conversation.id),
     };
   });
-  app.post('/api/conversations/:id/messages', async (request) => {
+  app.post('/api/conversation/messages', async (request) => {
     const { text, requestId } = sendInputSchema.parse(request.body);
+    const model = await models.defaults();
+    await agent.open(model);
     try {
-      await agent.send(idFrom(request.params), text, requestId);
+      await agent.send(text, requestId, model);
     } catch {
       throw new HttpError(
         409,
         'The conversation is busy or unavailable. Wait or stop the current reply.',
       );
     }
+
     return {
       ok: true,
     };
   });
-  app.post('/api/conversations/:id/stop', async (request) => {
-    await agent.stop(idFrom(request.params));
+  app.post('/api/conversation/stop', async () => {
+    await agent.stop();
+
     return {
       ok: true,
     };
   });
-  app.get('/api/conversations/:id/events', async (request, reply) => {
-    const id = idFrom(request.params);
-    await agent.snapshot(id);
+  app.get('/api/conversation/events', async (_request, reply) => {
+    const conversation = await agent.open(await models.defaults());
     const events = openEvents(reply);
-    const stop = await agent.watch(id, async (snapshot) =>
+    const stop = await agent.watch(async (snapshot) =>
       events.send('snapshot', {
         ...snapshot,
-        permissions: permissions.pending(id),
+        permissions: permissions.pending(conversation.id),
       }),
     );
     try {

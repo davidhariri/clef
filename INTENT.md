@@ -52,7 +52,7 @@ Dependable execution is a release requirement, not a competitive differentiator.
 
 ## First implementation
 
-The working chat slice includes account setup, encrypted provider credentials, key recovery, provider sign-in orchestration, model settings, persisted conversations, streaming updates, Stop, and web chat. Each server feature owns its behavior and tests. Import and layout checks enforce the module structure.
+The working chat slice includes account setup, encrypted provider credentials, key recovery, provider sign-in orchestration, model settings, one persistent conversation, streaming updates, Stop, and web chat. Each server feature owns its behavior and tests. Import and layout checks enforce the module structure.
 
 The web UI uses AI Elements for messages, scrolling, and prompt input, with shadcn/ui controls and dialogs. It keeps the Clef API and server-side agent loop. Web feature boundaries, global CSS placement, and a cognitive-complexity limit of 15 are enforced. Copied UI source versions and exceptions are recorded in `src/web/components/upstream/UPSTREAM.md`.
 

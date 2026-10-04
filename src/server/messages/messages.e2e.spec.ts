@@ -1,5 +1,21 @@
 import { expect, test } from '../../../tests/browser.js';
 
+test('opens the same persistent chat for concurrent clients', async ({ page, clef }) => {
+  await clef.setup();
+  const responses = await Promise.all([
+    page.request.get(`${clef.url}/api/conversation`),
+    page.request.get(`${clef.url}/api/conversation`),
+  ]);
+  for (const response of responses) expect(response.status()).toBe(200);
+
+  const [first, second] = await Promise.all(responses.map((response) => response.json()));
+  expect(first.conversation.id).toBe(second.conversation.id);
+  await clef.restart();
+  const restored = await page.request.get(`${clef.url}/api/conversation`);
+  expect(restored.status()).toBe(200);
+  expect((await restored.json()).conversation.id).toBe(first.conversation.id);
+});
+
 test('streams a reply, reconnects after reload, and retains it after server restart', async ({
   page,
   clef,
@@ -52,30 +68,8 @@ test('streams a reply, reconnects after reload, and retains it after server rest
       name: 'Clef reply',
     }),
   ).toContainText('Remember the blue notebook');
-  await page
-    .getByRole('button', {
-      name: 'New conversation',
-      exact: true,
-    })
-    .click();
-  await expect(
-    page.getByRole('heading', {
-      name: 'What’s on your mind?',
-    }),
-  ).toBeVisible();
-  await page
-    .getByRole('navigation', {
-      name: 'Conversations',
-    })
-    .getByRole('button', {
-      name: 'Remember the blue notebook',
-    })
-    .click();
-  await expect(
-    page.getByRole('article', {
-      name: 'Clef reply',
-    }),
-  ).toContainText('Remember the blue notebook');
+  await expect(page).toHaveURL(clef.url);
+  await expect(page.getByRole('navigation')).toHaveCount(0);
   await test.info().attach('chat', {
     body: await page.screenshot(),
     contentType: 'image/png',

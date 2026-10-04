@@ -4,7 +4,7 @@ test('rejects unauthenticated access, foreign origins, foreign hosts, and reused
   page,
   clef,
 }) => {
-  expect((await page.request.get(`${clef.url}/api/conversations`)).status()).toBe(401);
+  expect((await page.request.get(`${clef.url}/api/conversation`)).status()).toBe(401);
   expect(
     (
       await page.request.post(`${clef.url}/api/setup`, {
@@ -34,7 +34,7 @@ test('rejects unauthenticated access, foreign origins, foreign hosts, and reused
   await clef.setup();
   expect(
     (
-      await page.request.post(`${clef.url}/api/conversations`, {
+      await page.request.post(`${clef.url}/api/conversation/messages`, {
         headers: {
           Origin: 'https://attacker.example',
         },
@@ -60,7 +60,7 @@ test('rejects unauthenticated access, foreign origins, foreign hosts, and reused
       })
     ).ok(),
   ).toBe(true);
-  expect((await page.request.get(`${clef.url}/api/conversations`)).status()).toBe(401);
+  expect((await page.request.get(`${clef.url}/api/conversation`)).status()).toBe(401);
 });
 
 test('closes an active conversation stream when its session is revoked', async ({ page, clef }) => {
