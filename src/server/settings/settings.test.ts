@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { testApplication } from '../../../tests/installation.js';
+import { availablePort } from '../../../tests/network.js';
 import { type SettingsView, settingsViewSchema } from './contract.js';
 
 describe('settings API', () => {
@@ -207,6 +208,33 @@ describe('settings API', () => {
     ).toEqual(original);
   });
 
+  it('rejects an unsafe Ollama endpoint without activating the replacement', async () => {
+    const document = structuredClone(original.active);
+    document.models.connections.push({
+      provider: 'ollama',
+      url: 'file:///private-model-data',
+    });
+    const response = await clef.server.inject({
+      method: 'PUT',
+      url: '/api/settings',
+      headers: clef.headers,
+      payload: {
+        source: JSON.stringify(document),
+        revision: original.revision,
+      },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.body).not.toContain('private-model-data');
+    expect(
+      (
+        await clef.server.inject({
+          url: '/api/settings',
+          headers: clef.headers,
+        })
+      ).json(),
+    ).toEqual(original);
+  });
+
   it('bounds HTTP bodies and configuration files', async () => {
     const large = `${source}#${'x'.repeat(65536)}`;
     const response = await clef.server.inject({
@@ -274,11 +302,13 @@ it('refuses a named pipe without blocking server startup', async () => {
           '--import',
           'tsx',
           'src/server/main.ts',
+          'serve',
         ],
         {
           env: {
             ...process.env,
             CLEF_HOME: home,
+            CLEF_PORT: String(await availablePort()),
           },
           timeout: 3000,
         },
@@ -310,11 +340,13 @@ it('refuses startup with an invalid initial permission policy', async () => {
           '--import',
           'tsx',
           'src/server/main.ts',
+          'serve',
         ],
         {
           env: {
             ...process.env,
             CLEF_HOME: home,
+            CLEF_PORT: String(await availablePort()),
           },
           timeout: 10000,
         },

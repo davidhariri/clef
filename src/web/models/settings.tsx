@@ -77,7 +77,10 @@ export function ModelDefaults({ saved }: { saved: () => void }) {
             event.preventDefault();
             action.run(async () => {
               await request('/api/models/default', okSchema, {
-                body: { ...selection, revision: catalog?.revision },
+                body: {
+                  ...selection,
+                  revision: catalog?.revision,
+                },
                 method: 'PUT',
               });
               saved();

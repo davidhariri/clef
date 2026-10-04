@@ -29,7 +29,11 @@ export const modelConfigurationSchema = z.strictObject({
           url: z.string().min(1).max(2048),
         }),
         z.strictObject({
-          provider: z.string().min(1).max(80).regex(/^[a-zA-Z0-9_-]+$/),
+          provider: z
+            .string()
+            .min(1)
+            .max(80)
+            .regex(/^[a-zA-Z0-9_-]+$/),
           secretRef: z.string().min(1).max(100),
         }),
       ]),

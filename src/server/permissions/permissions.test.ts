@@ -37,6 +37,12 @@ it('expires a configuration request and rejects late decisions without saving a 
   await vi.waitFor(() => expect(permissions.pending('chat')).toHaveLength(1));
   const pending = permissions.pending('chat')[0];
   if (!pending) throw new Error('Expected a configuration request');
+  await expect(permissions.decide(pending.id, 'once', 'another-conversation')).rejects.toThrow(
+    'no longer active',
+  );
+  expect(permissions.pending('chat')).toEqual([
+    pending,
+  ]);
   await expect(
     permissions.authorizeConfiguration('chat', 'duplicate', change, new AbortController().signal),
   ).rejects.toThrow('already pending');

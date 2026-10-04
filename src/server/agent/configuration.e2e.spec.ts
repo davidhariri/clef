@@ -17,10 +17,7 @@ async function settings(page: Page, url: string) {
 }
 
 async function snapshot(page: Page, url: string) {
-  const id = new URLSearchParams(new URL(page.url()).hash.slice(1)).get('chat');
-  return snapshotSchema.parse(
-    await (await page.request.get(`${url}/api/conversations/${id}`)).json(),
-  );
+  return snapshotSchema.parse(await (await page.request.get(`${url}/api/conversation`)).json());
 }
 
 for (const [name, overrides] of Object.entries({
@@ -210,7 +207,7 @@ for (const interruption of [
       }),
     ).toHaveCount(0);
     const response = await page.request.post(
-      `${clef.url}/api/conversations/${pending.conversation.id}/permissions/${pending.permissions[0]?.id}`,
+      `${clef.url}/api/conversation/permissions/${pending.permissions[0]?.id}`,
       {
         data: {
           choice: 'always',
@@ -278,7 +275,7 @@ test('Always persists only the displayed model, conversation and switch scope', 
     page.getByRole('region', {
       name: 'Configuration approval',
     }),
-  ).toContainText('Do not switch this conversation.');
+  ).toContainText('Do not switch this reply. Saved defaults apply to your next message.');
   await page
     .getByRole('button', {
       name: 'Always',
@@ -301,7 +298,7 @@ test('Always persists only the displayed model, conversation and switch scope', 
         name: 'Clef reply',
       })
       .last(),
-  ).toContainText('Configuration finished on test-model. Applied.');
+  ).toContainText('Configuration finished on second-model. Applied.');
   expect((await snapshot(page, clef.url)).permissions).toEqual([]);
   for (const text of [
     'configure original defaults only',
@@ -327,56 +324,16 @@ test('Always persists only the displayed model, conversation and switch scope', 
         .last(),
     ).toContainText('Rejected.');
   }
-  await page
-    .getByRole('button', {
-      name: 'New conversation',
-      exact: true,
-    })
-    .click();
-  await expect(
-    page.getByRole('heading', {
-      name: 'What’s on your mind?',
-    }),
-  ).toBeVisible();
-  await expect(
-    page.getByText('Reconnecting…', {
-      exact: true,
-    }),
-  ).toHaveCount(0);
-  await send(page, 'configure defaults only');
-  await expect(
-    page.getByRole('region', {
-      name: 'Configuration approval',
-    }),
-  ).toBeVisible();
-  await page
-    .getByRole('button', {
-      name: 'Deny',
-      exact: true,
-    })
-    .click();
   expect((await settings(page, clef.url)).active.permissions).toHaveLength(1);
 });
 
-test('requires approval and switches only the requesting conversation at the next model request', async ({
+test('requires approval and switches the persistent conversation at the next model request', async ({
   page,
   clef,
 }) => {
   await clef.setup();
-  const unrelated = await (
-    await page.request.post(`${clef.url}/api/conversations`, {
-      data: {},
-    })
-  ).json();
+  const original = await snapshot(page, clef.url);
   await page.goto(clef.url);
-  await expect(page).toHaveURL(`${clef.url}/#chat=${unrelated.id}`);
-  await page
-    .getByRole('button', {
-      name: 'New conversation',
-      exact: true,
-    })
-    .click();
-  await expect(page).not.toHaveURL(`${clef.url}/#chat=${unrelated.id}`);
   await expect(page.locator('header')).toContainText('Connected');
   await expect(page.locator('header')).not.toContainText('Loading…');
   await page.getByPlaceholder('Message Clef…').fill('configure switch');
@@ -409,10 +366,7 @@ test('requires approval and switches only the requesting conversation at the nex
   expect((await (await page.request.get(`${clef.url}/api/models`)).json()).defaults.modelId).toBe(
     'second-model',
   );
-  expect(
-    (await (await page.request.get(`${clef.url}/api/conversations/${unrelated.id}`)).json())
-      .conversation.model.modelId,
-  ).toBe('test-model');
+  expect((await snapshot(page, clef.url)).conversation.id).toBe(original.conversation.id);
   await clef.restart();
   await page.reload();
   await expect(page.locator('header')).toContainText('second-model');

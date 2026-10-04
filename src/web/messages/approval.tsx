@@ -38,15 +38,14 @@ export function Approval({ approval }: { approval: PermissionRequest }) {
       </p>
       <p>
         {approval.switchConversation
-          ? 'Also switch this conversation at its next model request.'
-          : 'Do not switch this conversation.'}
+          ? 'Also switch this reply at its next model request.'
+          : 'Do not switch this reply. Saved defaults apply to your next message.'}
       </p>
       <p>Conversation: {approval.conversationId}</p>
       <p className="break-all">Requested revision: {approval.revision}</p>
       <p>
         Always and Never apply only to this conversation, this exact model and thinking level, and
-        this switch option. Other conversations keep their model. The selected provider receives
-        this conversation if switched.
+        this switch option. The selected provider receives this conversation when it is used.
       </p>
       <div className="flex flex-wrap gap-2">
         {choices.map(({ choice, label }) => (
@@ -56,15 +55,11 @@ export function Approval({ approval }: { approval: PermissionRequest }) {
             disabled={action.busy}
             onClick={() =>
               action.run(async () => {
-                await request(
-                  `/api/conversations/${approval.conversationId}/permissions/${approval.id}`,
-                  okSchema,
-                  {
-                    body: {
-                      choice,
-                    },
+                await request(`/api/conversation/permissions/${approval.id}`, okSchema, {
+                  body: {
+                    choice,
                   },
-                );
+                });
               })
             }
           >

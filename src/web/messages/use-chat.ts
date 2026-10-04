@@ -22,9 +22,20 @@ export function useChat() {
     events.onopen = () => setConnected(true);
     events.onerror = () => setConnected(false);
     events.addEventListener('permissions', (event: MessageEvent<string>) => {
-      const update = z.object({ permissions: permissionRequestSchema.array() }).safeParse(JSON.parse(event.data));
+      const update = z
+        .object({
+          permissions: permissionRequestSchema.array(),
+        })
+        .safeParse(JSON.parse(event.data));
       if (update.success)
-        setSnapshot((current) => current ? { ...current, permissions: update.data.permissions } : current);
+        setSnapshot((current) =>
+          current
+            ? {
+                ...current,
+                permissions: update.data.permissions,
+              }
+            : current,
+        );
     });
     events.addEventListener('snapshot', (event: MessageEvent<string>) => {
       try {

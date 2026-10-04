@@ -4,6 +4,9 @@ import { createRegistry, Harness } from '@earendil-works/pi-durable';
 import { SqliteStorage } from '@earendil-works/pi-durable/storage/sqlite';
 import { expect, it } from 'vitest';
 import { testInstallation } from '../../../tests/installation.js';
+import { openCredentials } from '../credentials/index.js';
+import { openModels } from '../models/index.js';
+import { openPermissions } from '../permissions/index.js';
 import { openInstallation } from '../platform/database.js';
 import { openAgent } from './index.js';
 
@@ -48,12 +51,30 @@ it('opens the most recent stored chat and keeps older chat records intact', asyn
   await harness.close(BACKGROUND_CONTEXT);
 
   const reopened = await openInstallation(installation.home);
-  const agent = await openAgent(reopened.database, models);
+  const credentials = await openCredentials(reopened.database, reopened.keyPath);
+  const configuredModels = await openModels(
+    reopened.database,
+    credentials.store,
+    installation.settings,
+    [],
+  );
+  await installation.settings.initialize((configuration) =>
+    configuredModels.validateConfiguration(configuration),
+  );
+  const permissions = await openPermissions(reopened.database, installation.settings);
+  const agent = await openAgent(
+    reopened.database,
+    configuredModels,
+    installation.settings,
+    permissions,
+  );
   try {
     expect((await agent.open(settings)).id).toBe(String(latest.id));
     expect((await agent.open(settings)).id).toBe(String(latest.id));
   } finally {
     await agent.close();
+    permissions.close();
+    await credentials.close();
   }
 
   const preserved = await openInstallation(installation.home);

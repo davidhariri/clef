@@ -43,16 +43,23 @@ test('reloads settings without interrupting a pinned model stream or its SSE con
       name: 'Stop reply',
     }),
   ).toHaveCount(0);
+  await page.getByPlaceholder('Message Clef…').fill('Use the saved model');
   await page
     .getByRole('button', {
-      name: 'New conversation',
-      exact: true,
+      name: 'Send message',
     })
     .click();
+  await expect(
+    page
+      .getByRole('article', {
+        name: 'Clef reply',
+      })
+      .last(),
+  ).toContainText('Clef heard: Use the saved model');
   await expect(page.locator('header')).toContainText('second-model');
 });
 
-test('changes defaults only for new conversations and replaces a provider connection', async ({
+test('applies model changes to the next message and replaces a provider connection', async ({
   page,
   clef,
 }) => {
@@ -90,12 +97,17 @@ test('changes defaults only for new conversations and replaces a provider connec
       exact: true,
     }),
   ).toBeVisible();
+  await page.getByPlaceholder('Message Clef…').fill('Use the selected model');
   await page
     .getByRole('button', {
-      name: 'New conversation',
-      exact: true,
+      name: 'Send message',
     })
     .click();
+  await expect(
+    page.getByRole('article', {
+      name: 'Clef reply',
+    }),
+  ).toContainText('Clef heard: Use the selected model');
   await expect(
     page.getByText('second-model', {
       exact: true,

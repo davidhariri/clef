@@ -2,7 +2,8 @@ import { once } from 'node:events';
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { dirname, join } from 'node:path';
-import { availablePort, expect, test } from '../../../tests/package.js';
+import { availablePort } from '../../../tests/network.js';
+import { expect, test } from '../../../tests/package.js';
 
 test('rejects an occupied port before registering a service or opening application data', async ({
   installed,

@@ -47,17 +47,29 @@ export function registerMessageRoutes(
     };
   });
   app.post('/api/conversation/permissions/:requestId', async (request) => {
-    const { requestId } = z.object({ requestId: z.string().uuid() }).parse(request.params);
-    const { choice } = z.strictObject({ choice: permissionChoiceSchema }).parse(request.body);
+    const { requestId } = z
+      .object({
+        requestId: z.string().uuid(),
+      })
+      .parse(request.params);
+    const { choice } = z
+      .strictObject({
+        choice: permissionChoiceSchema,
+      })
+      .parse(request.body);
     const { conversation } = await agent.snapshot();
     await permissions.decide(requestId, choice, conversation.id);
-    return { ok: true };
+    return {
+      ok: true,
+    };
   });
   app.get('/api/conversation/events', async (_request, reply) => {
     const conversation = await agent.open(await models.defaults());
     const events = openEvents(reply);
     const unsubscribe = permissions.subscribe(() => {
-      void events.send('permissions', { permissions: permissions.pending(conversation.id) });
+      void events.send('permissions', {
+        permissions: permissions.pending(conversation.id),
+      });
     });
     const stop = await agent.watch(async (snapshot) =>
       events.send('snapshot', {

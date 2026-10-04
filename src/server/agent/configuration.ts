@@ -52,7 +52,7 @@ export function configurationTools(settings: Settings, models: Models, permissio
   const change = defineTool({
     name: 'settings_change',
     description:
-      'Request an exact model-default change, optionally switching this conversation at its next model request. User approval is required unless this exact scope has a saved rule. Inspect first. Cannot edit permissions, credentials, references, endpoints, or other conversations.',
+      'Request an exact model-default change for the next user message, optionally switching this reply at its next model request. User approval is required unless this exact scope has a saved rule. Inspect first. Cannot edit permissions, credentials, references, endpoints, or other conversations.',
     parameters: Type.Object(
       {
         revision: Type.String({
