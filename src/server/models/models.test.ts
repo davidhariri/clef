@@ -17,17 +17,30 @@ it('keeps explicit model settings across restart without changing providers', as
         },
       ],
     }).provider;
-    const models = await openModels(installation.database, credentials.store, [
-      provider,
-    ]);
+    const models = await openModels(
+      installation.database,
+      credentials.store,
+      installation.settings,
+      [
+        provider,
+      ],
+    );
+    await installation.settings.initialize((configuration) =>
+      models.validateConfiguration(configuration),
+    );
     await models.saveDefaults({
       provider: 'test',
       modelId: 'test-model',
       thinkingLevel: 'off',
     });
-    const reopened = await openModels(installation.database, credentials.store, [
-      provider,
-    ]);
+    const reopened = await openModels(
+      installation.database,
+      credentials.store,
+      installation.settings,
+      [
+        provider,
+      ],
+    );
     expect((await reopened.catalog()).defaults).toEqual({
       provider: 'test',
       modelId: 'test-model',

@@ -52,6 +52,7 @@ src/server/
   accounts/                  Account setup, passwords, and login sessions
   credentials/               Encryption key, encrypted credentials, and recovery
   permissions/               Pending approvals and saved access rules
+  settings/                  Configuration file validation and activation
   models/                    Provider connections and model selection
   agent/                     Pi Durable and Codemode integration
   messages/                  Conversation and message API
@@ -95,7 +96,7 @@ The platform contains shared mechanisms, not feature policy. It cannot import fe
 
 One database connection can serve several features. This does not make one module the owner of all storage. Each feature defines its own tables and queries in its repository. Other features request operations through the owning feature's public interface, not SQL against its tables.
 
-The platform opens and closes SQLite. It contains no feature tables or schema changes. The credentials module owns the key file and encryption. Accounts own password hashes and login sessions. Permissions own saved rules. Pi Durable remains the storage authority for harness messages and tasks; do not add a second message repository beside it.
+The platform opens and closes SQLite. It contains no feature tables or schema changes. The credentials module owns the key file and encryption. Accounts own password hashes and login sessions. Permissions own saved rule schemas and decisions. Settings owns configuration file reads, validation, replacement, and activation. Models and permissions supply their section schemas. Pi Durable remains the storage authority for harness messages and tasks; do not add a second message repository beside it.
 
 Coordinate operations that cross features through explicit public operations. Do not move their implementations into the composition root. Design a transaction or recovery contract when a cross-feature operation requires it; a sequence of calls is not automatically atomic.
 
@@ -176,7 +177,7 @@ Store persistent permission rules in configuration files. Let the user inspect a
 
 Check network destinations and redirects before sending requests. Do not treat approval of an MCP server URL as approval of every tool it provides. Clef can restrict which MCP calls it sends, but it cannot enforce its local sandbox rules inside an independent MCP server.
 
-Keep the tool registry empty until the required bounds are available and tested. Set explicit limits for script time, memory, output, and host-call work. Apply output limits before host buffering, not only after an execution returns. Permission waits must also expire. Stopping a script must cancel pending approvals and signal active tools to stop. Cancellation does not undo completed external actions. Do not blindly replay an interrupted script that may have caused side effects.
+The registry contains only two trusted configuration tools: `settings_inspect` and `settings_change`. Their bounds and approval rules are defined below. Keep scripts, shell tools, general file tools, network tools, and imported extensions disabled until their required bounds are available and tested. Set explicit limits for script time, memory, output, and host-call work. Apply output limits before host buffering, not only after an execution returns. Permission waits must also expire. Stopping a script must cancel pending approvals and signal active tools to stop. Cancellation does not undo completed external actions. Do not blindly replay an interrupted script that may have caused side effects.
 
 ### Future VM workers
 
@@ -209,13 +210,24 @@ The database, configuration files, and file workspace must persist when the cont
 
 ### Configuration files and live activation
 
-File-backed configuration and live activation are planned. The current implementation stores model defaults, the Ollama server URL, and saved permission rules in SQLite.
+`settings.yaml` in the installation directory is the source of truth for model defaults, provider references, the Ollama server URL, and saved permission rules. Settings owns the file operations. Models and permissions own their schemas and rules. The server removes the obsolete SQLite configuration without importing it. Accounts, credentials, conversations, and the installation identifier remain in SQLite.
 
-Non-secret configuration files are the source of truth. The agent can read and edit them through scoped file tools. Feature modules still own their configuration schemas and rules. Do not maintain a competing settings store in SQLite.
+The file accepts version 1 with `models` and `permissions` sections. It must be a regular file of at most 64 KiB. Symlinks, YAML aliases, duplicate keys, unknown fields, and unknown tags are rejected. Provider references must use `provider:<id>` for that same registered provider. Arbitrary secret references and endpoint changes are not supported. Credentials remain in the shared encrypted secret store. A reference does not grant access to a secret.
 
-Configuration files contain generic secret references, never secret values. Keep credentials in one shared encrypted secret store. Trusted server code resolves a reference only for an authorized operation. Possession of a reference does not grant permission to read the secret or send it to an arbitrary destination. Do not copy secrets into extension settings, generated code, or model context.
+Reads load changes lazily. The server validates the complete replacement before activation. A failed reload retains the last valid snapshot and returns a diagnostic without raw source. It blocks configuration writes until the file is repaired. Invalid initial configuration prevents startup. Reloads do not restart the server or interrupt active model streams. Existing conversations keep their selected model.
 
-Load changed configuration lazily. Prepare and validate a replacement while the current version remains active. Activate only a complete, valid replacement. Keep the current valid version when preparation fails. Configuration reloads must not restart the server or break client connections. Keep authentication, permission enforcement, and durable storage ownership outside the replaceable configuration.
+Authenticated clients can inspect `/api/settings`, validate YAML through `/api/settings/validate`, and replace it with `PUT /api/settings`. Replacement requires the current revision. Writes are serialized, validated, flushed, and renamed into place. A second revision check detects an external edit before replacement. External editors do not participate in the server's write queue: do not edit the file at the same time as an API or tool write. The final check and rename are not a cross-process transaction.
+
+The agent has two trusted configuration tools, not general file access:
+
+- `settings_inspect` returns the validated non-secret model configuration, revision, safe diagnostic, saved rule count, and at most 20 model choices. Results over 16 KiB are rejected before they return to the harness.
+- `settings_change` accepts only a revision, exact model defaults, and a switch option for the calling conversation. It cannot change permissions, references, endpoints, credentials, or another conversation. Its acknowledgement is bounded to 1 KiB.
+
+Each change needs an authenticated approval unless an exact saved rule applies. A pending request binds the revision, target defaults, calling conversation, and tool task. There is at most one pending configuration request per conversation and 100 pending approvals in total. Requests expire after 120 seconds. Stop and restart cancel pending requests. Stale, repeated, and cross-conversation decisions cannot authorize a change. Always and Never apply only to the displayed conversation, model, thinking level, and switch option. Duplicate saved scopes are invalid.
+
+An approved switch uses Pi Durable's conversation configuration operation. It changes the next model request, not the current generation. Saving defaults and switching the conversation are separate durable writes, not one transaction. An interruption can leave new defaults saved without switching the conversation. Mutating tool calls use unsafe replay policy: recovery does not repeat the action automatically. Inspect both settings and the conversation before retrying.
+
+Generic secret references, extension configuration, and scoped file tools remain planned. Keep authentication, permission enforcement, and durable storage ownership outside replaceable configuration.
 
 ## Secrets and account access
 

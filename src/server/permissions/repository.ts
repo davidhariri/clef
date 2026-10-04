@@ -1,35 +1,44 @@
 import type { Database } from '../platform/database.js';
-import { type PermissionRule, permissionRuleSchema } from './contract.js';
+import type { Settings } from '../settings/index.js';
+import { type PermissionRule, permissionScopeKey } from './contract.js';
 
 export class PermissionRepository {
-  constructor(private readonly database: Database) {}
-  async initialize(): Promise<void> {
-    await this.database.exec(
-      'CREATE TABLE IF NOT EXISTS clef_permissions (origin TEXT NOT NULL, method TEXT NOT NULL, decision TEXT NOT NULL, PRIMARY KEY(origin, method))',
+  constructor(private readonly settings: Settings) {}
+
+  static async removeObsoleteTable(database: Database): Promise<void> {
+    await database.exec('DROP TABLE IF EXISTS clef_permissions');
+  }
+
+  async view() {
+    const view = await this.settings.view();
+    return {
+      revision: view.revision,
+      rules: view.active.permissions,
+      error: view.error,
+    };
+  }
+
+  async save(rule: PermissionRule, revision?: string, signal?: AbortSignal): Promise<string> {
+    const view = await this.settings.view();
+    const saved = await this.settings.update(
+      revision ?? view.revision,
+      (document) => {
+        document.permissions = document.permissions.filter(
+          (item) => permissionScopeKey(item) !== permissionScopeKey(rule),
+        );
+        document.permissions.push(rule);
+      },
+      signal,
     );
+    return saved.revision;
   }
-  async rules(): Promise<PermissionRule[]> {
-    return permissionRuleSchema
-      .array()
-      .parse(
-        await this.database.all(
-          'SELECT origin, method, decision FROM clef_permissions ORDER BY origin',
-        ),
-      );
-  }
-  async save(rule: PermissionRule): Promise<void> {
-    await this.database.run(
-      'INSERT INTO clef_permissions(origin, method, decision) VALUES (?, ?, ?) ON CONFLICT(origin, method) DO UPDATE SET decision = excluded.decision',
-      rule.origin,
-      rule.method,
-      rule.decision,
-    );
-  }
+
   async remove(origin: string): Promise<void> {
-    await this.database.run(
-      'DELETE FROM clef_permissions WHERE origin = ? AND method = ?',
-      origin,
-      'GET',
-    );
+    const view = await this.settings.view();
+    await this.settings.update(view.revision, (document) => {
+      document.permissions = document.permissions.filter(
+        (item) => 'kind' in item || item.origin !== origin,
+      );
+    });
   }
 }

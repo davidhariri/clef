@@ -45,9 +45,17 @@ it('completes browser sign-in through the provider and stores the token outside 
         },
       },
     };
-    const models = await openModels(installation.database, credentials.store, [
-      provider,
-    ]);
+    const models = await openModels(
+      installation.database,
+      credentials.store,
+      installation.settings,
+      [
+        provider,
+      ],
+    );
+    await installation.settings.initialize((configuration) =>
+      models.validateConfiguration(configuration),
+    );
     const login = await models.login.start('test');
     await vi.waitFor(() => expect(models.login.state(login.id).prompt).toBeTruthy());
     models.login.answer(login.id, 'accepted');

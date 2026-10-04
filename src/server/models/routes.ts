@@ -1,12 +1,18 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { revisionSchema } from '../settings/contract.js';
 import { modelSettingsSchema } from './contract.js';
 import type { Models } from './service.js';
 
 export function registerModelRoutes(app: FastifyInstance, models: Models): void {
   app.get('/api/models', async () => models.catalog());
   app.put('/api/models/default', async (request) => {
-    await models.saveDefaults(modelSettingsSchema.parse(request.body));
+    const { revision, ...selection } = modelSettingsSchema
+      .extend({
+        revision: revisionSchema,
+      })
+      .parse(request.body);
+    await models.saveDefaults(selection, revision);
     return {
       ok: true,
     };

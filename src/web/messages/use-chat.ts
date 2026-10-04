@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
+import { z } from 'zod';
 import { request } from '../../client/api.js';
 import { okSchema } from '../../server/accounts/contract.js';
 import { type ConversationSnapshot, snapshotSchema } from '../../server/messages/contract.js';
+import { permissionRequestSchema } from '../../server/permissions/contract.js';
 
 export function useChat() {
   const [snapshot, setSnapshot] = useState<ConversationSnapshot>();
@@ -19,6 +21,11 @@ export function useChat() {
     const events = new EventSource('/api/conversation/events');
     events.onopen = () => setConnected(true);
     events.onerror = () => setConnected(false);
+    events.addEventListener('permissions', (event: MessageEvent<string>) => {
+      const update = z.object({ permissions: permissionRequestSchema.array() }).safeParse(JSON.parse(event.data));
+      if (update.success)
+        setSnapshot((current) => current ? { ...current, permissions: update.data.permissions } : current);
+    });
     events.addEventListener('snapshot', (event: MessageEvent<string>) => {
       try {
         setSnapshot(snapshotSchema.parse(JSON.parse(event.data)));
