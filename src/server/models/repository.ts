@@ -32,6 +32,23 @@ export class ModelRepository {
       throw new Error('Stored model settings are invalid.');
     }
   }
+
+  async ollamaUrl(): Promise<string | undefined> {
+    const row = await this.database.get<{
+      value: string;
+    }>('SELECT value FROM clef_models WHERE key = ?', 'ollama-url');
+
+    return row?.value;
+  }
+
+  async saveOllamaUrl(url: string): Promise<void> {
+    await this.database.run(
+      'INSERT INTO clef_models(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+      'ollama-url',
+      url,
+    );
+  }
+
   async saveDefaults(settings: ModelSettings): Promise<void> {
     await this.database.run(
       'INSERT INTO clef_models(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
