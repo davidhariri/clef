@@ -1,22 +1,21 @@
-import type { CredentialStore, Model, Models as PiModels } from '@earendil-works/pi-ai';
-import { type ModelCatalog, type ModelSettings, thinkingSchema } from './contract.js';
+import {
+  type CredentialStore,
+  getSupportedThinkingLevels,
+  type MutableModels,
+} from '@earendil-works/pi-ai';
+import { HttpError } from '../platform/http.js';
+import type { ModelCatalog, ModelSettings } from './contract.js';
 import { ProviderLogin } from './login.js';
+import { discoverOllama, ollamaProvider, ollamaUrl } from './ollama.js';
 import type { ModelRepository } from './repository.js';
-
-export function thinkingLevels(model: Model<string>): ModelSettings['thinkingLevel'][] {
-  if (!model.reasoning)
-    return [
-      'off',
-    ];
-
-  return thinkingSchema.options.filter((level) => model.thinkingLevelMap?.[level] !== null);
-}
 
 export class Models {
   readonly login: ProviderLogin;
+  private ollamaServerUrl: string | undefined;
+  private ollamaError: string | undefined;
 
   constructor(
-    readonly runtime: PiModels,
+    readonly runtime: MutableModels,
     private readonly repository: ModelRepository,
     private readonly credentials: CredentialStore,
   ) {
@@ -25,6 +24,19 @@ export class Models {
       () => repository.deviceId(),
       (provider) => this.connected(provider),
     );
+  }
+
+  async restore(): Promise<void> {
+    this.ollamaServerUrl = await this.repository.ollamaUrl();
+    if (!this.ollamaServerUrl) return;
+
+    try {
+      const models = await discoverOllama(this.ollamaServerUrl);
+      this.runtime.setProvider(ollamaProvider(models));
+    } catch (error) {
+      if (!(error instanceof HttpError)) throw error;
+      this.ollamaError = error.message;
+    }
   }
 
   async catalog(): Promise<ModelCatalog> {
@@ -37,13 +49,18 @@ export class Models {
         id: provider.id,
         name: provider.name,
         oauth: provider.auth.oauth !== undefined,
-        connected: connected.has(provider.id),
+        connected:
+          provider.id === 'ollama'
+            ? this.ollamaServerUrl !== undefined
+            : connected.has(provider.id),
+        url: provider.id === 'ollama' ? this.ollamaServerUrl : undefined,
+        error: provider.id === 'ollama' ? this.ollamaError : undefined,
       })),
       models: available.map((model) => ({
         provider: model.provider,
         id: model.id,
         name: model.name,
-        thinkingLevels: thinkingLevels(model),
+        thinkingLevels: getSupportedThinkingLevels(model),
       })),
     };
   }
@@ -59,8 +76,8 @@ export class Models {
     const model = (await this.runtime.getAvailable(settings.provider)).find(
       (item) => item.id === settings.modelId,
     );
-    if (!model || !thinkingLevels(model).includes(settings.thinkingLevel))
-      throw new Error('Choose an available model and thinking level.');
+    if (!model || !getSupportedThinkingLevels(model).includes(settings.thinkingLevel))
+      throw new HttpError(400, 'Choose an available model and thinking level.');
 
     await this.repository.saveDefaults(settings);
   }
@@ -72,7 +89,7 @@ export class Models {
     const model = available.find((item) => item.id === 'gpt-6-luna') ?? available[0];
     if (!model) throw new Error('The provider has no available chat models.');
 
-    const levels = thinkingLevels(model);
+    const levels = getSupportedThinkingLevels(model);
 
     await this.saveDefaults({
       provider,
@@ -82,6 +99,8 @@ export class Models {
   }
 
   async connectKey(provider: string, key: string): Promise<void> {
+    if (provider === 'ollama')
+      throw new HttpError(400, 'Ollama uses a server URL, not an API key.');
     if (!this.runtime.getProvider(provider)?.auth.apiKey)
       throw new Error('Unknown API-key provider.');
 
@@ -90,6 +109,16 @@ export class Models {
       key,
     }));
     await this.connected(provider);
+  }
+
+  async connectOllama(input: string): Promise<void> {
+    const url = ollamaUrl(input);
+    const models = await discoverOllama(url);
+    await this.repository.saveOllamaUrl(url);
+    this.runtime.setProvider(ollamaProvider(models));
+    this.ollamaServerUrl = url;
+    this.ollamaError = undefined;
+    await this.connected('ollama');
   }
 
   deviceId(): Promise<string> {

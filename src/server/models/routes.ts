@@ -11,6 +11,18 @@ export function registerModelRoutes(app: FastifyInstance, models: Models): void 
       ok: true,
     };
   });
+  app.post('/api/models/ollama', async (request) => {
+    const input = z
+      .object({
+        url: z.string().trim().min(1).max(2048),
+      })
+      .strict()
+      .parse(request.body);
+    await models.connectOllama(input.url);
+    return {
+      ok: true,
+    };
+  });
   app.post('/api/models/key', async (request) => {
     const input = z
       .object({

@@ -1,5 +1,6 @@
 import { Page } from '../components/page.js';
 import { ApiKey } from './api-key.js';
+import { Ollama } from './ollama.js';
 import { ProviderLogin } from './provider-login.js';
 
 export function Connections({ refresh }: { refresh: () => Promise<void> }) {
@@ -7,6 +8,7 @@ export function Connections({ refresh }: { refresh: () => Promise<void> }) {
     <section aria-label="Provider connections" className="grid gap-5">
       <ProviderLogin refresh={refresh} />
       <ApiKey refresh={refresh} />
+      <Ollama refresh={refresh} />
       <p className="text-sm text-muted-foreground">
         Your selected provider receives the conversation sent to its model. ChatGPT subscription
         access and OpenAI API billing are separate.
