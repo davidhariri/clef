@@ -49,16 +49,11 @@ Read [ARCHITECTURE.md](ARCHITECTURE.md#server-modules) before changing module bo
 
 ## Tests and quality gates
 
-- Use TDD for behavior changes: add one failing test, implement the smallest complete behavior, then refactor. Confirm that the test fails for the intended reason before changing production code.
-- Extend the Playwright E2E suite as user-visible features change. Cover the real app and server, not a mock UI. Use controlled provider responses at the external model boundary for repeatable tests.
-- Add regression tests for defects. Keep permission denial, authentication, reconnect, cancellation, and restart behavior covered as those paths are built.
-- Use Biome as the only formatter and linter. Use strict TypeScript and Dependency Cruiser to enforce types and module boundaries. Do not add competing formatters, linters, or alternate implementations of existing operations.
-- During code changes, use focused tests for TDD, `npm run format` for formatting and safe fixes, and `npm run typecheck` for type feedback. Use `npm run check:fast` for lint, formatting, boundaries, types, and all unit/integration tests without a build or E2Es.
-- Before completing code, dependency, tooling, configuration, or CI changes, run `npm run check` after the final relevant edit. It runs the fast checks, production build, and E2Es. Do not repeat a successful full check when only documentation changes afterward. CI always runs the full check.
-- For documentation-only changes, review the diff, run `git diff --check` and `git diff --cached --check`, and verify changed links and anchors. Do not run application checks for prose-only edits. Inspect staged, unstaged, and untracked files before choosing this path. Runtime prompts, test fixtures, and other executable inputs are not documentation-only, regardless of file extension.
-- Fix failing checks before completion, including failures exposed by the current work. Do not skip tests, focus a subset in committed tests, add suppressions, loosen rules, lower thresholds, or change expected results merely to get a pass. Ask David before a justified change to the quality policy.
-- A temporary failing test is allowed during the red step of TDD. It is not an acceptable final state. If an external dependency blocks a check, report the exact blocker and leave the work marked incomplete.
-- Distinguish deterministic E2E evidence from a live provider test. Do not claim that real ChatGPT sign-in or inference worked unless it was actually verified.
+- Follow [Add behavior](CONTRIBUTING.md#add-behavior) for TDD and risk-based coverage. Test behavior through public interfaces, not every implementation layer.
+- Follow [Check a change](CONTRIBUTING.md#check-a-change) for required checks. Keep the full completion check for code and tooling; use diff and link checks for prose-only changes.
+- Use Biome as the only formatter and linter, strict TypeScript for types, and Dependency Cruiser for module boundaries. Do not add competing tools or tests that duplicate their standard checks.
+- Fix failing checks before completion, including failures exposed by the current work. Ask David before changing the quality policy; never weaken checks merely to get a pass.
+- Treat review effort as a quality constraint. Follow [Review a change](CONTRIBUTING.md#review-a-change); keep unrelated cleanup separate.
 
 ## Code clarity
 
@@ -67,7 +62,7 @@ Read [ARCHITECTURE.md](ARCHITECTURE.md#server-modules) before changing module bo
 - Keep Clef-owned functions at cognitive complexity 15 or less. Split real responsibilities rather than hide complexity behind arbitrary wrappers. Copied upstream UI has a scoped complexity exception, not an exemption from other checks.
 - Write for human readers, not minimum line count. Use expanded object and array literals. Biome enforces this layout; do not override it to compress code.
 - Use one blank line between distinct logical steps, before a result returned after preparation, and between functions or methods. Keep closely related statements together. Biome preserves these blank lines but does not invent them; review spacing as part of code quality.
-- Keep necessary rationale that code cannot express in focused documentation outside source files, not in README decision logs.
+- Prefer small public interfaces over forwarding layers. Add test helpers only when they remove repeated setup without hiding the behavior under test.
 - If a tool or dependency requires a code comment, ask before making an exception.
 
 ## Web appearance and copy
@@ -81,8 +76,7 @@ Read [ARCHITECTURE.md](ARCHITECTURE.md#server-modules) before changing module bo
 
 - Write all documentation in ASD-STE100 Simplified Technical English. Use short sentences, clear instructions, and consistent technical terms.
 - Use Mermaid diagrams when a diagram explains the system or a process more clearly than text.
-- Keep READMEs simple, stable, and written for humans: purpose, usage, and settled architecture.
-- Do not put project status, progress updates, open questions, decision discussions, or decision history in README files.
-- Keep goals and constraints in `INTENT.md`. Keep temporary research and decision-making notes in gitignored `tmp/`.
-- When a decision is settled, update the relevant documentation to describe the result, not the discussion that led to it.
-- Describe planned capabilities as plans; do not imply they already work.
+- Document each fact once; link to its owner instead of repeating it. Keep usage in `README.md`, workflow in `CONTRIBUTING.md`, architecture in `ARCHITECTURE.md`, and goals and constraints in `INTENT.md`.
+- Change docs only when usage, workflow, constraints, architecture, or necessary rationale changes. Prefer an edit to the owning document over a new file.
+- Do not add routine implementation summaries, progress reports, decision histories, or a document per feature. Keep temporary research and decision notes in gitignored `tmp/`.
+- Describe settled decisions as the current design and planned capabilities as plans. Do not imply they already work.
