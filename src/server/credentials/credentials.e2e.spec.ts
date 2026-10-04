@@ -20,7 +20,7 @@ test('locks after key loss, blocks model access, and restores with the saved key
   expect((await page.request.get(`${clef.url}/api/models`)).status()).toBe(423);
   expect(
     (
-      await page.request.post(`${clef.url}/api/conversations`, {
+      await page.request.post(`${clef.url}/api/conversation/messages`, {
         data: {},
       })
     ).status(),

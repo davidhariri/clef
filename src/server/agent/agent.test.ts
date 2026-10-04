@@ -38,22 +38,20 @@ it('streams one saved reply, deduplicates input, and restores the conversation a
     thinkingLevel: 'off',
   } as const;
   try {
-    const conversation = await agent.create(settings);
+    await agent.open(settings);
     const id = crypto.randomUUID();
-    await agent.send(conversation.id, 'Hello', id);
-    await agent.send(conversation.id, 'Hello', id);
-    await vi.waitFor(async () => expect((await agent.snapshot(conversation.id)).busy).toBe(false));
-    expect((await agent.snapshot(conversation.id)).messages.map((message) => message.text)).toEqual(
-      [
-        'Hello',
-        'Hello from the test model.',
-      ],
-    );
+    await agent.send('Hello', id, settings);
+    await agent.send('Hello', id, settings);
+    await vi.waitFor(async () => expect((await agent.snapshot()).busy).toBe(false));
+    expect((await agent.snapshot()).messages.map((message) => message.text)).toEqual([
+      'Hello',
+      'Hello from the test model.',
+    ]);
     await agent.close();
     const reopened = await openInstallation(installation.home);
     const restored = await openAgent(reopened.database, models.runtime);
     try {
-      expect((await restored.snapshot(conversation.id)).messages).toHaveLength(2);
+      expect((await restored.snapshot()).messages).toHaveLength(2);
     } finally {
       await restored.close();
       await reopened.database.close();

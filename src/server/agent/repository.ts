@@ -5,17 +5,20 @@ import type { Database } from '../platform/database.js';
 
 export class AgentRepository {
   private constructor(readonly storage: SqliteStorage) {}
+
   static async open(database: Database): Promise<AgentRepository> {
     return new AgentRepository(await SqliteStorage.open(database));
   }
-  async conversations(): Promise<ConversationRecord[]> {
-    const records: ConversationRecord[] = [];
+
+  async latestConversation(): Promise<ConversationRecord | undefined> {
+    let latest: ConversationRecord | undefined;
     let cursor: Cursor | undefined;
     do {
       const page = await this.storage.scanConversations({}, 100, cursor, BACKGROUND_CONTEXT);
-      records.push(...page.items);
+      latest = page.items.at(-1) ?? latest;
       cursor = page.next;
     } while (cursor);
-    return records;
+
+    return latest;
   }
 }

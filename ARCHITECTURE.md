@@ -151,7 +151,9 @@ The first server binds to IPv4 loopback. It accepts only its local host names an
 
 Sessions use random tokens. SQLite stores token hashes, not raw tokens. Browser cookies are HTTP-only and SameSite Strict, with a seven-day lifetime. The local HTTP cookie is not suitable for remote deployment. Logout revokes the session and closes its active response streams. SSE connections renew at least once per minute, which also rechecks expired sessions.
 
-Conversation commands use HTTP JSON. SSE sends validated full snapshots, so a reconnect does not depend on an in-memory event history. The client keeps the selected conversation in the URL fragment. Send requests carry an ID for duplicate prevention. Each conversation keeps its selected model; changed defaults apply to new conversations only. Stop cancels active work but cannot undo completed actions.
+The app and API expose one persistent conversation. The server opens the most recently created stored conversation, or creates one if none exists. Older stored conversations remain unchanged but are not exposed. There are no create, list, or switch operations for clients, and no conversation selection in the URL.
+
+Conversation commands use HTTP JSON at `/api/conversation`. SSE sends validated full snapshots, so a reconnect does not depend on an in-memory event history. Send requests carry an ID for duplicate prevention. Saved model and thinking settings apply to the next message. An active reply keeps its current settings. Stop cancels active work but cannot undo completed actions.
 
 The browser renders Markdown without raw HTML and does not automatically fetch model-supplied external images. These controls reduce specific risks; they are not a complete security guarantee.
 

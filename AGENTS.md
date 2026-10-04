@@ -3,6 +3,7 @@
 ## Implementation
 
 - Use TypeScript for the server and agent core.
+- When removing a feature, also remove its tests, unused code, dependencies, and obsolete documentation. Keep coverage for behavior that remains.
 - Use Pi Durable as the agent harness and Pi Codemode for restricted JavaScript execution.
 - Prefer secure-by-default in-process execution. Future VMs are optional workers for delegated subagent tasks, not the main agent's required home.
 - Use local SQLite for structured server state and a persistent folder or volume for workspace files.

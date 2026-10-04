@@ -1,6 +1,6 @@
 import { expect, test } from '../../../tests/browser.js';
 
-test('changes defaults only for new conversations and replaces a provider connection', async ({
+test('applies model changes to the next message and replaces a provider connection', async ({
   page,
   clef,
 }) => {
@@ -38,12 +38,17 @@ test('changes defaults only for new conversations and replaces a provider connec
       exact: true,
     }),
   ).toBeVisible();
+  await page.getByPlaceholder('Message Clef…').fill('Use the selected model');
   await page
     .getByRole('button', {
-      name: 'New conversation',
-      exact: true,
+      name: 'Send message',
     })
     .click();
+  await expect(
+    page.getByRole('article', {
+      name: 'Clef reply',
+    }),
+  ).toContainText('Clef heard: Use the selected model');
   await expect(
     page.getByText('second-model', {
       exact: true,

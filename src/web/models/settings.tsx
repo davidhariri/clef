@@ -124,7 +124,7 @@ export function ModelDefaults({ saved }: { saved: () => void }) {
             }
           />
           <p className="text-sm text-muted-foreground">
-            Used for new conversations. Existing conversations keep their model.
+            Applies to your next message. An active reply keeps its current model.
           </p>
           <Button type="submit" disabled={action.busy || !selectedModel}>
             Save defaults

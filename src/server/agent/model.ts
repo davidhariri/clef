@@ -39,12 +39,10 @@ export function projectConversation(view: ConversationView): ConversationSnapsho
     const item = displayMessage(live.generation.message, 'streaming', true);
     if (item?.text) messages.push(item);
   }
-  const title =
-    messages.find((message) => message.role === 'user')?.text.slice(0, 60) ?? 'New conversation';
+
   return {
     conversation: {
       id: String(view.conversation.id),
-      title,
       model: {
         ...agent.model,
         thinkingLevel: agent.thinkingLevel ?? 'off',

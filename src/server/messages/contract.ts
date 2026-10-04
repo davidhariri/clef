@@ -14,9 +14,8 @@ export const messageSchema = z.object({
   pending: z.boolean(),
 });
 export type ChatMessage = z.infer<typeof messageSchema>;
-export const conversationSchema = z.object({
+const conversationSchema = z.object({
   id: z.string(),
-  title: z.string(),
   model: modelSettingsSchema,
 });
 export type ConversationInfo = z.infer<typeof conversationSchema>;

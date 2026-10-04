@@ -58,10 +58,7 @@ test('copies a rendered reply and closes Settings with Escape', async ({ page, c
   ).toBeFocused();
 });
 
-test('uses Enter to send, Shift+Enter for a new line, and preserves a selected conversation', async ({
-  page,
-  clef,
-}) => {
+test('uses Enter to send and Shift+Enter for a new line', async ({ page, clef }) => {
   await clef.setup();
   await page.goto(clef.url);
 
@@ -81,12 +78,6 @@ test('uses Enter to send, Shift+Enter for a new line, and preserves a selected c
   });
   await expect(reply).toContainText('Second line');
   await expect(input).toHaveValue('');
-  await page
-    .getByRole('navigation', {
-      name: 'Conversations',
-    })
-    .getByRole('button')
-    .click();
   await expect(reply).toHaveCount(1);
   await expect(reply).toContainText('First line');
   await expect(
