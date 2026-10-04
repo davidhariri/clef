@@ -323,7 +323,7 @@ test('connects Ollama in web setup without a key and streams through the selecte
   ).toBe(true);
 });
 
-test('persists the Ollama endpoint and chosen defaults without changing existing conversations or cloud connections', async ({
+test('persists the Ollama endpoint and applies saved defaults to the next message without changing cloud connections', async ({
   page,
   clef,
   ollama,
@@ -366,18 +366,20 @@ test('persists the Ollama endpoint and chosen defaults without changing existing
       exact: true,
     }),
   ).toBeVisible();
-  await page
-    .getByRole('button', {
-      name: 'New conversation',
-      exact: true,
-    })
-    .click();
+  await send(page, 'Use the local model.');
+  await expect(page.getByLabel('Clef reply')).toContainText('Hello from local Ollama.');
+  await expect(page.getByLabel('Stop reply')).toHaveCount(0);
   await expect(
     page.getByText('qwen-test:small', {
       exact: true,
     }),
   ).toBeVisible();
-  const originalId = new URLSearchParams(new URL(page.url()).hash.slice(1)).get('chat');
+  expect(
+    ollama.requests.filter(({ path }) => path === '/v1/chat/completions').at(-1)?.body,
+  ).toMatchObject({
+    model: 'qwen-test:small',
+    reasoning_effort: 'xhigh',
+  });
 
   await page
     .getByRole('button', {
@@ -419,7 +421,7 @@ test('persists the Ollama endpoint and chosen defaults without changing existing
     thinkingLevel: 'off',
   });
   const original = snapshotSchema.parse(
-    await (await page.request.get(`${clef.url}/api/conversations/${originalId}`)).json(),
+    await (await page.request.get(`${clef.url}/api/conversation`)).json(),
   );
   expect(original.conversation.model).toEqual({
     provider: 'ollama',
@@ -427,19 +429,15 @@ test('persists the Ollama endpoint and chosen defaults without changing existing
     thinkingLevel: 'xhigh',
   });
   await send(page, 'Say hello after restart.');
-  await expect(page.getByLabel('Clef reply')).toContainText('Hello from local Ollama.');
-  expect(
-    ollama.requests.filter(({ path }) => path === '/v1/chat/completions').at(-1)?.body,
-  ).toMatchObject({
-    model: 'qwen-test:small',
-    reasoning_effort: 'xhigh',
+  await expect(page.getByLabel('Clef reply')).toHaveCount(2);
+  await expect(page.getByLabel('Clef reply').last()).toContainText('Hello from local Ollama.');
+  const nextRequest = ollama.requests
+    .filter(({ path }) => path === '/v1/chat/completions')
+    .at(-1)?.body;
+  expect(nextRequest).toMatchObject({
+    model: 'plain-test:small',
   });
-  await page
-    .getByRole('button', {
-      name: 'New conversation',
-      exact: true,
-    })
-    .click();
+  expect(nextRequest).not.toHaveProperty('reasoning_effort');
   await expect(
     page.getByText('plain-test:small', {
       exact: true,
@@ -645,9 +643,8 @@ test('reports model inference failure without switching to a connected cloud pro
     reasoning_effort: 'none',
   });
   expect((await models.catalog()).defaults).toEqual(selection);
-  const id = new URLSearchParams(new URL(page.url()).hash.slice(1)).get('chat');
   const snapshot = snapshotSchema.parse(
-    await (await page.request.get(`${clef.url}/api/conversations/${id}`)).json(),
+    await (await page.request.get(`${clef.url}/api/conversation`)).json(),
   );
   expect(snapshot.conversation.model).toEqual(selection);
   expect(snapshot.messages.filter(({ role }) => role === 'assistant')).toHaveLength(1);
