@@ -56,6 +56,42 @@ async function inspectFixture(files: Record<string, string>) {
 
 it.each([
   [
+    'host processes in another feature',
+    'src/server/agent/index.ts',
+    'export { execFile } from "node:child_process";',
+    'no-host-process-execution',
+  ],
+  [
+    'host processes in platform',
+    'src/server/platform/process.ts',
+    'export { execFile } from "node:child_process";',
+    'no-host-process-execution',
+  ],
+  [
+    'host processes elsewhere in lifecycle',
+    'src/server/lifecycle/index.ts',
+    'export { spawn } from "child_process";',
+    'no-host-process-execution',
+  ],
+  [
+    'VM execution in the native supervisor',
+    'src/server/lifecycle/supervisor.ts',
+    'export { runInNewContext } from "node:vm";',
+    'no-host-code-execution',
+  ],
+  [
+    'VM execution in other features',
+    'src/server/agent/index.ts',
+    'export { runInNewContext } from "vm";',
+    'no-host-code-execution',
+  ],
+  [
+    'SQLite drivers in lifecycle',
+    'src/server/lifecycle/repository.ts',
+    'export { DatabaseSync } from "node:sqlite";',
+    'sqlite-driver-has-one-owner',
+  ],
+  [
     'private web implementation',
     'src/web/messages/index.ts',
     'export { settings } from "../models/settings.js";',
@@ -127,6 +163,14 @@ it.each([
   const result = await inspectFixture(files);
   expect(result.status).toBe(1);
   expect(result.output).toContain(rule);
+});
+
+it('allows native service commands only from the lifecycle supervisor', async () => {
+  const result = await inspectFixture({
+    'src/server/lifecycle/supervisor.ts':
+      'import { execFile } from "node:child_process"; export const inspect = () => execFile("launchctl", ["print", "gui/501"]);',
+  });
+  expect(result.status).toBe(0);
 });
 
 it('allows public feature interfaces and browser-safe contracts', async () => {

@@ -44,6 +44,8 @@ export async function createApp(options: { home: string; providers?: readonly Pr
   return {
     server,
     setupToken,
-    needsSetup: !(await accounts.hasAccount()),
+    async entryUrl(url: string) {
+      return (await accounts.hasAccount()) ? url : `${url}/#setup=${setupToken}`;
+    },
   };
 }

@@ -29,13 +29,15 @@ export function Chat({ refresh }: { refresh: () => Promise<void> }) {
           </p>
         )}
         <Transcript key={`transcript:${chat.id}`} snapshot={chat.snapshot} />
-        <Composer
-          key={`composer:${chat.id}`}
-          ready={chat.connected && Boolean(chat.snapshot)}
-          generating={chat.snapshot?.busy ?? false}
-          send={chat.send}
-          stop={chat.stop}
-        />
+        {chat.id && (
+          <Composer
+            key={`composer:${chat.id}`}
+            ready={chat.connected && Boolean(chat.snapshot)}
+            generating={chat.snapshot?.busy ?? false}
+            send={chat.send}
+            stop={chat.stop}
+          />
+        )}
       </main>
     </div>
   );

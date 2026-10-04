@@ -47,7 +47,8 @@ Clef is a feature-based modular monolith: one server process with separate domai
 src/server/
   main.ts                    Process entry and shutdown
   app.ts                     Explicit module construction and route registration
-  platform/database.ts       Database connection and installation paths
+  lifecycle/                 Native user service, process ownership, and private readiness
+  platform/database.ts       Database connections, process locks, and installation paths
   accounts/                  Account setup, passwords, and login sessions
   credentials/               Encryption key, encrypted credentials, and recovery
   permissions/               Pending approvals and saved access rules
@@ -101,6 +102,8 @@ Coordinate operations that cross features through explicit public operations. Do
 ### Enforcement and change locality
 
 Dependency Cruiser rejects private cross-feature imports, unsafe contract dependencies, client imports of server code, circular dependencies, and feature-aware platform code. Rules include type-only dependencies. New feature folders are discovered automatically.
+
+Only `lifecycle/supervisor.ts` can import `child_process` in production. Its private command interface accepts fixed launchctl and systemctl operations with argument arrays and no shell. This exception does not expose host execution to models or other features. VM execution stays forbidden everywhere. The platform database module remains the only SQLite driver owner, including the technical process-lock mechanism.
 
 Architecture tests exercise allowed and forbidden imports in temporary projects. They also check the server layout and the no-comments rule. Biome rejects focused and skipped tests. `npm run check` runs these checks with types, behavior tests, the build, and E2E tests. CI runs the same command.
 
@@ -196,7 +199,7 @@ Clef has no direct Windows installation path.
 
 ## Storage
 
-Use local SQLite for structured runtime state, including accounts, sessions, traces, analytics events, messages, and encrypted secrets. Also store the task state that Pi Durable needs. Use Pi Durable's SQLite adapter for harness state. One server process owns the database. Clients access it only through the Clef API.
+Use local SQLite for structured runtime state, including accounts, sessions, traces, analytics events, messages, and encrypted secrets. Also store the task state that Pi Durable needs. Use Pi Durable's SQLite adapter for harness state. One server process owns the database. The canonical process entry holds a kernel-released SQLite transaction lock before it opens application data. A separate lock serializes lifecycle commands. These locks do not own feature tables or replace Pi Durable storage. Clients access the database only through the Clef API.
 
 Keep skills, active projects, second-brain notes, and other files in a file workspace. Use an ordinary folder for direct installation or a mounted folder or volume for a container. Keep the database separate from the file workspace.
 
@@ -247,7 +250,11 @@ flowchart TD
     key -->|No| locked["Recovery required · Block secret-dependent work"]
 ```
 
-When the main process starts without a completed setup, enter setup mode and print a link to the web UI. Keep onboarding short, with two steps:
+`clef` starts a native user-session service and returns after the server is ready. launchd manages macOS installations; systemd's user manager manages Linux installations. Both invoke the same `clef serve` foreground entry. Development also uses this entry. The service persists beyond the launching terminal and starts with the user session. It is not a privileged boot service.
+
+The lifecycle module owns service registration and private startup metadata. The account feature still owns setup. The composition root supplies the existing account-dependent web address to the lifecycle module. A private Unix socket gives that address to the CLI after the HTTP listener is ready. The CLI checks the native PID too. Managed logs and public HTTP routes do not expose the setup token. See [installation and service controls](INSTALLATION.md).
+
+When setup is incomplete, the CLI prints the protected web setup link. Keep onboarding short, with two steps:
 
 1. **Account and encryption.** Default the editable username to the server's hostname. Ask for a password and encryption key. Provide a Generate button and a one-time copy view for the key.
 2. **Model provider.** Add a cloud provider through sign-in or an API key, or connect a local Ollama server by URL. Apply the model and thinking level chosen by Clef for that provider.

@@ -8,6 +8,7 @@
     "clef": "lib/server/main.js"
   },
   "files": [
+    "INSTALLATION.md",
     "lib/",
     "dist/",
     "src/web/components/upstream/LICENSE-AI-ELEMENTS",
@@ -33,9 +34,9 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "tsx src/server/main.ts",
+    "dev": "tsx src/server/main.ts serve",
     "build": "rm -rf lib && vite build && tsc --project tsconfig.build.json",
-    "start": "node lib/server/main.js",
+    "start": "node lib/server/main.js serve",
     "prepack": "npm run build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",

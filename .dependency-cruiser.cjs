@@ -197,7 +197,18 @@ module.exports = {
         pathNot: tests,
       },
       to: {
-        path: '^(node:)?(child_process|vm)$',
+        path: '^(node:)?vm$',
+      },
+    },
+    {
+      name: 'no-host-process-execution',
+      severity: 'error',
+      from: {
+        path: '^src/',
+        pathNot: `^src/server/lifecycle/supervisor\\.ts$|${tests}`,
+      },
+      to: {
+        path: '^(node:)?child_process$',
       },
     },
     {
