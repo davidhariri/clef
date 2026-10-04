@@ -23,6 +23,8 @@ export const catalogSchema = z.object({
       name: z.string(),
       oauth: z.boolean(),
       connected: z.boolean(),
+      url: z.string().optional(),
+      error: z.string().optional(),
     }),
   ),
   models: z.array(

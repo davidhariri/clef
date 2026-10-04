@@ -40,6 +40,9 @@ export function ModelDefaults({ saved }: { saved: () => void }) {
 
   const models = catalog?.models.filter((model) => model.provider === selection?.provider) ?? [];
   const selectedModel = models.find((model) => model.id === selection?.modelId);
+  const providerError = catalog?.providers.find(
+    (provider) => provider.id === selection?.provider,
+  )?.error;
 
   function selectModel(model: ModelCatalog['models'][number] | undefined) {
     if (!model) return;
@@ -54,6 +57,18 @@ export function ModelDefaults({ saved }: { saved: () => void }) {
   return (
     <section className="grid gap-4" aria-label="Model defaults">
       <h3 className="font-medium">Models / Default</h3>
+      {catalog?.providers
+        .filter((provider) => provider.error)
+        .map((provider) => (
+          <p key={provider.id} role="alert" className="text-sm text-destructive">
+            {provider.error}
+          </p>
+        ))}
+      {catalog && selection && !selectedModel && !providerError && (
+        <p role="alert" className="text-sm text-destructive">
+          The selected model is unavailable. Connect its server or choose another model.
+        </p>
+      )}
       {selection && (
         <form
           className="grid gap-4"
@@ -111,7 +126,7 @@ export function ModelDefaults({ saved }: { saved: () => void }) {
           <p className="text-sm text-muted-foreground">
             Used for new conversations. Existing conversations keep their model.
           </p>
-          <Button type="submit" disabled={action.busy}>
+          <Button type="submit" disabled={action.busy || !selectedModel}>
             Save defaults
           </Button>
         </form>

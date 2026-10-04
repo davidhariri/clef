@@ -207,7 +207,7 @@ The database, configuration files, and file workspace must persist when the cont
 
 ### Configuration files and live activation
 
-File-backed configuration and live activation are planned. The current implementation stores model defaults and saved permission rules in SQLite.
+File-backed configuration and live activation are planned. The current implementation stores model defaults, the Ollama server URL, and saved permission rules in SQLite.
 
 Non-secret configuration files are the source of truth. The agent can read and edit them through scoped file tools. Feature modules still own their configuration schemas and rules. Do not maintain a competing settings store in SQLite.
 
@@ -257,7 +257,7 @@ The lifecycle module owns service registration and private startup metadata. The
 When setup is incomplete, the CLI prints the protected web setup link. Keep onboarding short, with two steps:
 
 1. **Account and encryption.** Default the editable username to the server's hostname. Ask for a password and encryption key. Provide a Generate button and a one-time copy view for the key.
-2. **Model provider.** Add a provider through sign-in or an API key. Apply the model and thinking level chosen by Clef for that provider.
+2. **Model provider.** Add a cloud provider through sign-in or an API key, or connect a local Ollama server by URL. Apply the model and thinking level chosen by Clef for that provider.
 
 Protect the setup link with a temporary, single-use setup token. A random visitor must not be able to claim the server. Disable setup access after completion. Do not admit agent work until setup is complete. Remote setup must use HTTPS or a secure tunnel.
 
@@ -270,9 +270,16 @@ Use Pi's `pi-ai` provider layer beneath Pi Durable. Keep provider credentials in
 | OpenAI | Sign in with ChatGPT, or enter an OpenAI API key |
 | OpenRouter | Sign in with OpenRouter, or enter an API key |
 | Anthropic | Enter an API key for Claude |
+| Ollama | Enter the local server URL; no user API key or stored credential |
 | Other Pi providers | Use the access methods supported by the provider adapter |
 
 ChatGPT subscription access and OpenAI API billing are different. Show that difference in setup. Provider sign-in must work when the browser and server are on different machines. Do not assume that a browser callback can reach the server through `localhost`.
+
+Ollama discovery uses `/api/tags` and `/api/show`. The models feature registers the result with Pi's existing OpenAI-compatible adapter. Pi Durable remains the agent owner. The adapter receives the fixed non-secret client parameter `ollama`, as described in [Ollama's OpenAI compatibility documentation](https://docs.ollama.com/api/openai-compatibility). This is not an issued key or authentication. It is not saved in the credential store.
+
+The models repository owns the Ollama URL. Startup discovers models again, with a ten-second deadline. A discovery failure keeps the URL and defaults and is shown in the model catalog. A failed replacement connection leaves the active connection unchanged. Connecting another provider never replaces existing defaults.
+
+The URL is reached by the Clef server, not the browser. Unauthenticated HTTP is suitable only for a trusted network, not a public endpoint. Clef offers installed local chat models, not cloud aliases. Thinking controls come from Ollama's model metadata and use Pi's supported thinking-level map.
 
 Clef defines a default model and thinking level for each supported provider. At **Settings > Models > Default**, provide provider and model dropdowns and a thinking-level selector. Only offer models and thinking levels supported by the selected provider connection. Preserve the user's choice; never silently switch providers.
 
