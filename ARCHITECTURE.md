@@ -168,7 +168,7 @@ Deny external access by default. When an action has no applicable permission, ke
 | Always | Save an allow rule for the scope shown. |
 | Never | Save a deny rule for the scope shown. |
 
-Store persistent permission rules in SQLite. Let the user inspect and revoke them. Scripts cannot grant themselves access. Bind each approval to the pending action; reject approvals for cancelled or expired actions.
+Store persistent permission rules in configuration files. Let the user inspect and revoke them. Editing a file cannot grant a script access; activation must enforce the user's authorization. Scripts cannot grant themselves access. Bind each approval to the pending action; reject approvals for cancelled or expired actions.
 
 Check network destinations and redirects before sending requests. Do not treat approval of an MCP server URL as approval of every tool it provides. Clef can restrict which MCP calls it sends, but it cannot enforce its local sandbox rules inside an independent MCP server.
 
@@ -197,11 +197,21 @@ Clef has no direct Windows installation path.
 
 ## Storage
 
-Use local SQLite mainly for traces, analytics events, messages, encrypted secrets, and configuration. Also store the task state that Pi Durable needs. Use Pi Durable's SQLite adapter for harness state. One server process owns the database. Clients access it only through the Clef API.
+Use local SQLite for structured runtime state, including accounts, sessions, traces, analytics events, messages, and encrypted secrets. Also store the task state that Pi Durable needs. Use Pi Durable's SQLite adapter for harness state. One server process owns the database. Clients access it only through the Clef API.
 
 Keep skills, active projects, second-brain notes, and other files in a file workspace. Use an ordinary folder for direct installation or a mounted folder or volume for a container. Keep the database separate from the file workspace.
 
-Both stores must persist when the container is replaced. Backups must include the database and the file workspace. Use a SQLite-safe backup method; do not copy only the main database file while it is active.
+The database, configuration files, and file workspace must persist when the container is replaced. Backups must include all three. Use a SQLite-safe backup method; do not copy only the main database file while it is active.
+
+### Configuration files and live activation
+
+File-backed configuration and live activation are planned. The current implementation stores model defaults and saved permission rules in SQLite.
+
+Non-secret configuration files are the source of truth. The agent can read and edit them through scoped file tools. Feature modules still own their configuration schemas and rules. Do not maintain a competing settings store in SQLite.
+
+Configuration files contain generic secret references, never secret values. Keep credentials in one shared encrypted secret store. Trusted server code resolves a reference only for an authorized operation. Possession of a reference does not grant permission to read the secret or send it to an arbitrary destination. Do not copy secrets into extension settings, generated code, or model context.
+
+Load changed configuration lazily. Prepare and validate a replacement while the current version remains active. Activate only a complete, valid replacement. Keep the current valid version when preparation fails. Configuration reloads must not restart the server or break client connections. Keep authentication, permission enforcement, and durable storage ownership outside the replaceable configuration.
 
 ## Secrets and account access
 

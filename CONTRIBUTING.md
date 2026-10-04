@@ -35,21 +35,53 @@ E2E tests must run the real application and server. For repeatable model tests, 
 
 ## Check a change
 
+Use the smallest useful check during development. Keep the full check as the completion gate for code and tooling.
+
+| When | Checks |
+| --- | --- |
+| During code changes | Focused tests for TDD, formatting, and type feedback |
+| After a group of code edits | `npm run check:fast` |
+| Before completing code or tooling changes | `npm run check` after the final relevant edit |
+| Documentation-only changes | Diff review, whitespace checks, and changed links and anchors |
+
+For focused feedback:
+
+```sh
+npm test -- src/server/permissions/permissions.test.ts
+npm run format
+npm run typecheck
+npm run check:fast
+```
+
+`format` applies Biome formatting and safe fixes. `check:fast` runs lint, formatting checks, dependency boundaries, TypeScript, and all unit/integration tests. It does not build the app or run E2Es.
+
+For a focused E2E run, build first:
+
+```sh
+npm run build
+npm run test:e2e -- src/server/accounts/accounts.e2e.spec.ts
+```
+
+Before completing code, dependency, tooling, configuration, or CI changes:
+
 ```sh
 npm run format
 npm run check
 ```
 
-`format` applies Biome formatting and safe fixes. `check` runs formatting and lint checks, dependency boundaries, TypeScript, unit/integration tests, the production build, and Playwright E2E tests.
+`check` runs `check:fast`, the production build, and Playwright E2E tests. Focused and fast checks do not replace it. Run it after the final relevant edit; do not repeat a successful run when only documentation changes afterward. CI always runs the full check.
 
-For a focused test run during development:
+For documentation-only changes:
 
 ```sh
-npm test -- src/server/permissions/permissions.test.ts
-npm run test:e2e -- src/server/accounts/accounts.e2e.spec.ts
+git status --short
+git diff --check
+git diff --cached --check
 ```
 
-A focused run does not replace the full check before completion. Do not use `.only`, `.skip`, suppression comments, relaxed rules, or changed expectations to hide a failure. Fix the cause. If a dependency blocks verification, report the blocker and mark the work incomplete.
+Review staged, unstaged, and untracked files before choosing this path. Review the documentation diff and verify changed link targets and heading anchors. Prose-only edits do not need application checks. Runtime prompts, test fixtures, and other executable inputs are not documentation-only, even when stored in Markdown files.
+
+Do not use `.only`, `.skip`, suppression comments, relaxed rules, or changed expectations to hide a failure. Fix the cause. If a dependency blocks verification, report the blocker and mark the work incomplete.
 
 ## Readable source and web styles
 

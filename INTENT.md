@@ -23,12 +23,15 @@ Dependable execution is a release requirement, not a competitive differentiator.
 3. **Data flow is clear.** Explain which services receive personal data. Do not claim that self-hosting keeps data private from a cloud model provider when context is sent to that provider.
 4. **Self-hosting must be usable.** Setup, updates, backups, and recovery are part of the product, not maintenance left unexplained to the user.
 5. **The harness is the core.** Keep it small and extensible through a few clear primitives. Add capabilities without turning the core into a collection of app-specific workflows.
+6. **Clef can change its own behaviour.** Let the agent edit non-secret configuration files and build restricted extensions. Validate changes before activation. Keep the server available during configuration reloads.
 
 ## Engineering constraints
 
 - Use TypeScript for the server and agent core. Keep this repo focused on the service, web app, and CLI chat TUI. First-party desktop and mobile apps are part of the product; their implementation and repo placement remain undecided.
 - Use Pi Durable as the agent harness and Pi Codemode for restricted JavaScript execution. The first MVP does not include a host shell, Just Bash, or VM workers.
-- Use local SQLite mainly for traces, analytics events, messages, encrypted secrets, and configuration, plus Pi Durable task state. Keep skills, projects, notes, and other files in a persistent folder or volume.
+- Use local SQLite for structured runtime state, including accounts, sessions, traces, analytics events, messages, encrypted secrets, and Pi Durable task state. Keep skills, projects, notes, and other files in a persistent folder or volume.
+- Store non-secret configuration in files as the source of truth, not in a second settings store in SQLite. Configurations contain references to one shared encrypted secret store, never secret values. Trusted server code resolves these references only for authorized operations.
+- Load and reload configuration lazily without restarting the server or breaking client connections. Prepare and validate a replacement before activation. Keep the current valid version if preparation fails.
 - Keep the installation encryption key separate from the user account. Show it for copying during setup only. Keep a protected server copy outside SQLite and the workspace for automatic unlock after restarts.
 - Hash account passwords. Encrypt stored secrets. Keep the encryption key and server credentials out of model context and untrusted code.
 - Do as much work as possible in-process through secure-by-default libraries. Keep model-written JavaScript in the restricted runtime and expose only permission-checked native and MCP tools. Do not load untrusted code into the host JavaScript environment.
@@ -57,6 +60,7 @@ The stock Markdown and code renderer increases the web bundle. Vite reports gene
 
 This is not the complete agent MVP. Keep these limits explicit:
 
+- **Self-configuration is planned.** Model defaults and saved permission rules are currently in SQLite. File-backed configuration, generic secret references, and validated live activation are not implemented yet.
 - **Code execution is disabled.** Pi Codemode `1.0.1` exposes time and guest-memory limits, but no host-output byte limit. Its `dist/runtime/host.js` appends each output item to a host array. Cutting the returned result cannot prevent this accumulation. Obtain a bounded runtime before exposing scripts. The permission service is tested, but is not connected to executable tools or an approval UI yet.
 - **One live ChatGPT connection is verified.** On 2026-10-03, David completed sign-in. Read-only inspection confirmed an encrypted OpenAI OAuth credential and a successful `openai-responses` reply from `gpt-6-luna`, with no recorded authentication error. No token values were printed. Token refresh, expired or revoked credentials, and other accounts remain unverified. Automated tests still use controlled external provider behavior with the real server, storage, harness, browser, and terminal.
 - **Model defaults need review.** The current rule prefers `gpt-6-luna` when available, otherwise the first available model of the explicitly connected provider. It uses medium thinking when supported. These are provisional choices, not agreed product defaults. Existing defaults never switch when another provider connects.

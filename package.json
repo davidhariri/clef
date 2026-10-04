@@ -17,7 +17,8 @@
     "lint": "biome check --error-on-warnings .",
     "boundaries": "depcruise src --config .dependency-cruiser.cjs",
     "test:e2e": "playwright test",
-    "check": "npm run lint && npm run boundaries && npm run typecheck && npm test && npm run build && npm run test:e2e"
+    "check:fast": "npm run lint && npm run boundaries && npm run typecheck && npm test",
+    "check": "npm run check:fast && npm run build && npm run test:e2e"
   },
   "dependencies": {
     "@earendil-works/chord": "1.0.1",
