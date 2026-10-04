@@ -46,7 +46,7 @@ Choose a model and thinking level in **Settings > Models > Default**. Changed de
 
 - **Local setup** - Install it on a macOS or Linux computer you control. Docker packaging and remote access are planned.
 - **Self-extension (planned)** - Clef will be able to write extensions and small scripts. Code execution is disabled until resource limits are enforced.
-- **Self-configuration (planned)** - Clef will be able to change its configuration. For now, use the web settings to change models and provider connections.
+- **Self-configuration** - Clef can inspect model settings and request a model-default change. Approve changes in web chat, with an optional switch of that conversation. Connect providers through web settings. See [configuration limits](ARCHITECTURE.md#configuration-files-and-live-activation).
 
 ## License
 

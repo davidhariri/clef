@@ -57,6 +57,7 @@ export function ModelDefaults({ saved }: { saved: () => void }) {
   return (
     <section className="grid gap-4" aria-label="Model defaults">
       <h3 className="font-medium">Models / Default</h3>
+      {catalog?.configurationError && <p role="alert">{catalog.configurationError}</p>}
       {catalog?.providers
         .filter((provider) => provider.error)
         .map((provider) => (
@@ -76,7 +77,10 @@ export function ModelDefaults({ saved }: { saved: () => void }) {
             event.preventDefault();
             action.run(async () => {
               await request('/api/models/default', okSchema, {
-                body: selection,
+                body: {
+                  ...selection,
+                  revision: catalog?.revision,
+                },
                 method: 'PUT',
               });
               saved();

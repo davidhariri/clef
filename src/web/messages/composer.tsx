@@ -63,7 +63,8 @@ export function Composer({
         </PromptInputFooter>
       </PromptInput>
       <p className="text-center text-xs text-muted-foreground">
-        Your chosen model receives this conversation. No tools are enabled yet.
+        Your chosen model receives this conversation. Configuration changes require approval.
+        Scripts, shell and file access are disabled.
       </p>
     </div>
   );

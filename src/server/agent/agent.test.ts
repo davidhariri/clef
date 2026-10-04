@@ -3,6 +3,7 @@ import { expect, it, vi } from 'vitest';
 import { testInstallation } from '../../../tests/installation.js';
 import { openCredentials } from '../credentials/index.js';
 import { openModels } from '../models/index.js';
+import { openPermissions } from '../permissions/index.js';
 import { openInstallation } from '../platform/database.js';
 import { openAgent } from './index.js';
 
@@ -23,15 +24,23 @@ it('streams one saved reply, deduplicates input, and restores the conversation a
       expect(
         context.messages
           .filter((message) => message.role === 'system')
-          .flatMap((message) => message.toolsAdded ?? []),
-      ).toEqual([]);
+          .flatMap((message) => message.toolsAdded ?? [])
+          .map((tool) => tool.name),
+      ).toEqual([
+        'settings_inspect',
+        'settings_change',
+      ]);
       return fauxAssistantMessage('Hello from the test model.');
     },
   ]);
-  const models = await openModels(installation.database, credentials.store, [
+  const models = await openModels(installation.database, credentials.store, installation.settings, [
     provider.provider,
   ]);
-  const agent = await openAgent(installation.database, models.runtime);
+  await installation.settings.initialize((configuration) =>
+    models.validateConfiguration(configuration),
+  );
+  const permissions = await openPermissions(installation.database, installation.settings);
+  const agent = await openAgent(installation.database, models, installation.settings, permissions);
   const settings = {
     provider: 'test',
     modelId: 'test-model',
@@ -49,7 +58,7 @@ it('streams one saved reply, deduplicates input, and restores the conversation a
     ]);
     await agent.close();
     const reopened = await openInstallation(installation.home);
-    const restored = await openAgent(reopened.database, models.runtime);
+    const restored = await openAgent(reopened.database, models, installation.settings, permissions);
     try {
       expect((await restored.snapshot()).messages).toHaveLength(2);
     } finally {
