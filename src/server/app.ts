@@ -11,8 +11,13 @@ import { openPermissions } from './permissions/index.js';
 import { openInstallation } from './platform/database.js';
 import { createHttpServer } from './platform/http.js';
 import { registerSettingsRoutes, Settings } from './settings/index.js';
+import { openTelegram, registerTelegramRoutes } from './telegram/index.js';
 
-export async function createApp(options: { home: string; providers?: readonly Provider[] }) {
+export async function createApp(options: {
+  home: string;
+  providers?: readonly Provider[];
+  telegramFetch?: typeof fetch | undefined;
+}) {
   const installation = await openInstallation(options.home);
   const credentials = await openCredentials(installation.database, installation.keyPath);
   const accounts = await openAccounts(installation.database, (key) =>
@@ -28,6 +33,14 @@ export async function createApp(options: { home: string; providers?: readonly Pr
   await settings.initialize((configuration) => models.validateConfiguration(configuration));
   const permissions = await openPermissions(installation.database, settings);
   const agent = await openAgent(installation.database, models, settings, permissions);
+  const telegram = await openTelegram({
+    database: installation.database,
+    home: installation.home,
+    credentials,
+    agent,
+    models,
+    fetch: options.telegramFetch ?? fetch,
+  });
 
   const server = await createHttpServer();
   const setupToken = randomBytes(32).toString('base64url');
@@ -37,12 +50,14 @@ export async function createApp(options: { home: string; providers?: readonly Pr
   registerModelRoutes(server, models);
   registerSettingsRoutes(server, settings);
   registerMessageRoutes(server, agent, models, permissions);
+  registerTelegramRoutes(server, telegram);
 
   await server.register(staticFiles, {
     root: fileURLToPath(new URL('../../dist', import.meta.url)),
   });
 
   server.addHook('onClose', async () => {
+    await telegram.close();
     permissions.close();
     await models.login.close();
     await credentials.close();

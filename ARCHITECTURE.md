@@ -6,11 +6,15 @@ This document defines the target structure and its rules. See [First implementat
 flowchart TB
     apps["Desktop and mobile apps"] <--> api
     web["Web app · Chat and management"] <--> api
+    telegram["Telegram · Optional text channel"] <--> channel
 
     subgraph host["Host environment"]
         subgraph server["Clef server · TypeScript"]
             api["Clef API"]
+            channel["Telegram channel · Owner pairing and delivery"]
             agent["Pi Durable"]
+            channel <--> agent
+            api --> channel
             subgraph sandbox["Restricted runtime · Worker thread"]
                 code["Pi Codemode · QuickJS / WebAssembly"]
             end
@@ -56,6 +60,7 @@ src/server/
   models/                    Provider connections and model selection
   agent/                     Pi Durable and Codemode integration
   messages/                  Conversation and message API
+  telegram/                  Bot connection, owner pairing, polling, and delivery
 ```
 
 The tree defines ownership as the modules are built. It is not a requirement to create empty modules in advance.
@@ -123,6 +128,7 @@ src/web/
   models/                    Provider connections and model defaults
   messages/                  Conversation state, transcript, and composer
   settings/                  Settings dialog composition
+  telegram/                  Bot setup and connection status
   components/                Application-independent UI
     upstream/                Copied AI Elements and shadcn/ui sources
   platform/                  Shared technical hooks
@@ -157,6 +163,22 @@ The app and API expose one persistent conversation. The server opens the most re
 Conversation commands use HTTP JSON at `/api/conversation`. SSE sends validated full snapshots, so a reconnect does not depend on an in-memory event history. Send requests carry an ID for duplicate prevention. Saved model and thinking settings apply to the next message. An active reply keeps its current settings. Stop cancels active work but cannot undo completed actions.
 
 The browser renders Markdown without raw HTML and does not automatically fetch model-supplied external images. These controls reduce specific risks; they are not a complete security guarantee.
+
+### Telegram channel
+
+Telegram is the first optional messaging channel. Its code ships with Clef, but it adds no runtime dependency and makes no Telegram requests until configured. It is a built-in feature module, not an npm plugin loader. Keep new channel implementations separate from the agent. Do not build a general plugin system before another channel needs one.
+
+The channel uses the official Bot API over outbound HTTPS long polling. The local HTTP API remains on loopback. No webhook or public listener is added. Authenticated Clef API routes manage the connection. An expiring, one-time pairing link binds it to one private Telegram account. Group messages, other senders, and bot senders cannot reach the agent. Pairing codes do not enter model context.
+
+The channel calls the existing agent operations. Pi Durable remains the only conversation and task owner. A request ID identifies the reply to each admitted message; unrelated web replies are not forwarded. Telegram input and web input use the same conversation. A busy conversation rejects input rather than creating another agent run. Use the web app to stop a reply.
+
+`telegram/` owns `telegram.json` in the Clef home directory. It contains the bot identity and a secret reference, not the token. The token uses the existing encrypted credential store. Polling checks for file changes. A replacement must validate before activation; an invalid edit leaves the current connection active. Removing the file disables the channel. The Settings disconnect operation also deletes the saved token and pairing state.
+
+The feature owns its SQLite table for the paired account, update offset, and pending delivery metadata. It records receipt before agent submission and records each send attempt before contacting Telegram. Restart can resume waiting for an admitted request or send a completed reply that has not been attempted. An interrupted admission is not blindly repeated. An uncertain send is not repeated; Settings reports that the user must check the web chat. Explicit Telegram rate-limit rejections can retry after the requested delay. This is not an exactly-once delivery guarantee.
+
+API responses are limited to 512 KiB while reading. Polling requests have deadlines and read at most 20 updates at a time. Replies use plain text with link previews disabled. They are split into parts of at most 4,000 UTF-16 code units. Output above 60,000 code units is shortened with a notice to read the full reply in web chat. After five minutes of waiting, the channel directs the user to web chat; this does not cancel agent work. Voice processing, attachments, groups, and proactive messages are outside this version.
+
+See [Telegram setup and data flow](README.md#telegram).
 
 ## Code execution and permissions
 
@@ -210,7 +232,7 @@ The database, configuration files, and file workspace must persist when the cont
 
 ### Configuration files and live activation
 
-`settings.yaml` in the installation directory is the source of truth for model defaults, provider references, the Ollama server URL, and saved permission rules. Settings owns the file operations. Models and permissions own their schemas and rules. The server removes the obsolete SQLite configuration without importing it. Accounts, credentials, conversations, and the installation identifier remain in SQLite.
+`settings.yaml` in the installation directory is the source of truth for model defaults, provider references, the Ollama server URL, and saved permission rules. Settings owns the file operations. Models and permissions own their schemas and rules. The server removes the obsolete SQLite configuration without importing it. Accounts, credentials, conversations, and the installation identifier remain in SQLite. The [Telegram channel](#telegram-channel) uses a separate feature-owned configuration file; the agent configuration tools cannot change it.
 
 The file accepts version 1 with `models` and `permissions` sections. It must be a regular file of at most 64 KiB. Symlinks, YAML aliases, duplicate keys, unknown fields, and unknown tags are rejected. Cloud provider references must use `provider:<id>` for that same registered provider. An Ollama connection has `provider: ollama` and a canonical HTTP or HTTPS `url`, without a secret reference. Only trusted settings operations can change that URL. The agent tools cannot change endpoints or secret references. Credentials remain in the shared encrypted secret store. A reference does not grant access to a secret.
 

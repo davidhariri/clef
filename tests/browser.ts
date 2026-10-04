@@ -17,9 +17,16 @@ export const test = base.extend<{
   clef: ClefFixture;
   configurationOverrides: Record<string, unknown>;
   modelName: string;
+  telegramFetch: typeof fetch | undefined;
 }>({
   configurationOverrides: [
     {},
+    {
+      option: true,
+    },
+  ],
+  telegramFetch: [
+    undefined,
     {
       option: true,
     },
@@ -30,12 +37,13 @@ export const test = base.extend<{
       option: true,
     },
   ],
-  clef: async ({ page, configurationOverrides, modelName }, use) => {
+  clef: async ({ page, configurationOverrides, modelName, telegramFetch }, use) => {
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
     const home = await mkdtemp(join(tmpdir(), 'clef-browser-'));
     let application = await createApp({
       home,
+      telegramFetch,
       providers: [
         testProvider(configurationOverrides, modelName),
       ],
@@ -74,6 +82,7 @@ export const test = base.extend<{
           await application.server.close();
           application = await createApp({
             home,
+            telegramFetch,
             providers: [
               testProvider(configurationOverrides, modelName),
             ],
