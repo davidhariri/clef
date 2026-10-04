@@ -16,7 +16,7 @@ npm run build
 npm start
 ```
 
-`npm run dev` runs the TypeScript server directly. It still needs a built web app in `dist/`.
+`npm start` and `npm run dev` use the canonical foreground `serve` entry. They do not register a native service. `npm run dev` runs the TypeScript server directly and still needs a built web app in `dist/`. Use a temporary `CLEF_HOME` and a free `CLEF_PORT` for development; do not point development at a running user's data.
 
 Biome is the only formatter and linter. The VS Code settings enable format-on-save when the Biome extension is installed.
 
@@ -94,11 +94,17 @@ Do not use `.only`, `.skip`, suppression comments, relaxed rules, or changed exp
 
 ## Package and release
 
-The npm package is `@davidhariri/clef`. Its `clef` executable starts the server. It does not provide a separate chat client.
+The npm package is `@davidhariri/clef`. Its `clef` executable manages the native user-session server. It does not provide a separate chat client. See [service controls and updates](INSTALLATION.md).
 
-`npm run build` creates server JavaScript in `lib/` and the web app in `dist/`. Only those outputs and license notices are included with npm's required package metadata and README. Web and build dependencies stay in `devDependencies`. Keep install lifecycle scripts absent; users must be able to install with `--ignore-scripts`. `prepack` builds local source before ordinary packaging.
+`npm run build` creates server JavaScript in `lib/` and the web app in `dist/`. Only those outputs, the installation guide, and license notices are included with npm's required package metadata and README. Web and build dependencies stay in `devDependencies`. Keep install lifecycle scripts absent; users must be able to install with `--ignore-scripts`. `prepack` builds local source before ordinary packaging.
 
-The full E2E command includes the `app` and `package` projects. The package test creates a tarball, checks its contents, installs it into an isolated global prefix with scripts disabled, and starts `clef` outside the source checkout. It checks the real setup page and API without making a live model call. This test needs npm registry access or a sufficient npm cache.
+The full E2E command includes the `app` and `package` projects. Package and lifecycle tests create tarballs, check package contents, install into isolated global prefixes with scripts disabled, and invoke `clef` outside the source checkout. Each test gets unique data, a free loopback port, a native service identity, and a service configuration path. Tests remove only their own resources. These tests need npm registry access or a sufficient npm cache.
+
+The package test uses the real web setup and sign-in pages. It checks CLI exit, repeated start, status, stop, native configuration reload, and account preservation across an archive reinstall. Lifecycle tests cover unavailable managers, conflicts, failed registration, failed application startup, duplicate ownership, and native crash recovery. Controlled failures replace only native host commands, not the app or storage. No live model call is made.
+
+Native tests require a macOS desktop launchd domain or a Linux systemd user manager. The check workflow connects to the ephemeral Ubuntu runner's user bus through `XDG_RUNTIME_DIR` and `DBUS_SESSION_BUS_ADDRESS`. Its preflight fails if that manager is unavailable; it does not create a privileged service, enable lingering, or change account settings. A runner without a user manager needs an explicitly provisioned user-session test environment before these tests can run. Do not substitute mocks for Linux native evidence or change a developer's real account to make CI tests pass.
+
+A supervisor reload tests the saved runtime configuration, not an actual reboot. Report which OS ran the native tests. macOS results do not prove Linux runtime behavior. Real reboot and provider sign-in evidence are separate from the deterministic suite.
 
 Before a release:
 

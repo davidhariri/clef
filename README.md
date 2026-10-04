@@ -7,7 +7,7 @@ Clef is a general-purpose AI assistant that runs on computers you control. It's 
 
 ## Installation
 
-Use Node.js 24 LTS or newer
+Use Node.js 24 LTS or newer on macOS or Linux with a native user-session service manager.
 
 ```sh
 npm install -g @davidhariri/clef@latest --ignore-scripts
@@ -16,12 +16,9 @@ clef
 
 Open the setup link printed in your terminal. Create your account, save your recovery key, and connect a model provider. The package includes the built server and web app; installation does not need scripts or a source checkout.
 
-Clef runs in the foreground. Keep the terminal open, or press `Ctrl+C` to stop it. This release listens only on `127.0.0.1:3737` and does not install a background service.
+Clef runs in the background and starts with your user session. You can close the terminal. Use `clef status` to check it and `clef stop` to stop it and disable automatic startup. These commands preserve your data.
 
-- Data stays in `~/.local/share/clef`, outside the npm package. Set `CLEF_HOME` to use another directory.
-- Set `CLEF_PORT` to use another local port. Run only one server per data directory.
-- To update, stop Clef, repeat the install command, then run `clef` again. Your data stays in place.
-
+See [service controls, updates, and advanced configuration](INSTALLATION.md).
 
 ## Why Clef over Meta's Muse, XAI's Grokbot, or OpenAI's Dot?
 

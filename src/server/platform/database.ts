@@ -1,10 +1,31 @@
 import { chmod, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import type { SqliteDatabase } from '@earendil-works/pi-durable/storage/sqlite';
 import { openNodeSqliteDatabase } from '@earendil-works/pi-durable/storage/sqlite/node';
 
 export type Database = SqliteDatabase;
 export type Installation = Awaited<ReturnType<typeof openInstallation>>;
+
+export class ProcessLockBusyError extends Error {
+  constructor(path: string) {
+    super(`Another process holds ${path}.`);
+  }
+}
+
+export async function acquireProcessLock(path: string) {
+  const database = new DatabaseSync(path);
+  try {
+    await chmod(path, 0o600);
+    database.exec('BEGIN EXCLUSIVE');
+  } catch (error) {
+    database.close();
+    if (error instanceof Error && 'errcode' in error && error.errcode === 5)
+      throw new ProcessLockBusyError(path);
+    throw error;
+  }
+  return () => database.close();
+}
 
 export async function openInstallation(home: string) {
   for (const directory of [

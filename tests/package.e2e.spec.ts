@@ -1,56 +1,13 @@
-import { type ChildProcess, execFile, spawn } from 'node:child_process';
-import { once } from 'node:events';
-import { copyFile, mkdtemp, readFile, rm } from 'node:fs/promises';
-import { type AddressInfo, createServer } from 'node:net';
-import { tmpdir } from 'node:os';
+import { copyFile, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
-import { expect, test } from '@playwright/test';
-import { z } from 'zod';
-
-const execute = promisify(execFile);
-const artifactSchema = z.object({
-  name: z.string(),
-  filename: z.string(),
-  files: z.array(
-    z.object({
-      path: z.string(),
-    }),
-  ),
-});
-
-async function availablePort(): Promise<number> {
-  const listener = createServer();
-  listener.listen(0, '127.0.0.1');
-  await once(listener, 'listening');
-  const port = (listener.address() as AddressInfo).port;
-  const closed = once(listener, 'close');
-  listener.close();
-  await closed;
-
-  return port;
-}
-
-async function stop(server: ChildProcess): Promise<void> {
-  if (!server.pid || server.exitCode !== null || server.signalCode !== null) return;
-
-  const closed = once(server, 'exit');
-  const timeout = setTimeout(() => server.kill('SIGKILL'), 5000);
-  timeout.unref();
-  server.kill('SIGTERM');
-
-  try {
-    await closed;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
+import { execute, expect, test } from './package.js';
 
 function checkFiles(paths: string[]): void {
   expect(paths).toEqual(
     expect.arrayContaining([
       'package.json',
       'README.md',
+      'INSTALLATION.md',
       'LICENSE',
       'lib/server/main.js',
       'dist/index.html',
@@ -63,7 +20,7 @@ function checkFiles(paths: string[]): void {
   expect(
     paths.filter(
       (path) =>
-        !/^(package\.json|README\.md|LICENSE|lib\/server\/.+\.js|dist\/(index\.html|\.vite\/license\.md|assets\/.+)|src\/web\/components\/upstream\/(LICENSE-(AI-ELEMENTS|SHADCN)|UPSTREAM\.md))$/.test(
+        !/^(package\.json|README\.md|INSTALLATION\.md|LICENSE|lib\/server\/.+\.js|dist\/(index\.html|\.vite\/license\.md|assets\/.+)|src\/web\/components\/upstream\/(LICENSE-(AI-ELEMENTS|SHADCN)|UPSTREAM\.md))$/.test(
           path,
         ),
     ),
@@ -71,114 +28,174 @@ function checkFiles(paths: string[]): void {
   expect(paths.filter((path) => /\.(test|e2e\.spec)\.js$/.test(path))).toEqual([]);
 }
 
-test('installs globally without scripts and serves setup outside the source checkout', async ({
+test('installs without scripts, runs after CLI exit, and preserves the web account across updates', async ({
   page,
+  installed,
 }) => {
   test.setTimeout(120_000);
-  const home = await mkdtemp(join(tmpdir(), 'clef-package-'));
-  const prefix = join(home, 'install');
-  let server: ChildProcess | undefined;
+  const { cli, artifact, manifest, home } = installed;
+  expect(artifact.name).toBe('@davidhariri/clef');
+  checkFiles(artifact.files.map((file) => file.path));
+  expect(manifest.license).toBe('MIT');
+  expect(manifest.bin).toEqual({
+    clef: 'lib/server/main.js',
+  });
+  expect(manifest.scripts.preinstall).toBeUndefined();
+  expect(manifest.scripts.install).toBeUndefined();
+  expect(manifest.scripts.postinstall).toBeUndefined();
 
-  try {
-    const packed = await execute('npm', [
-      'pack',
-      '--ignore-scripts',
-      '--json',
-      '--pack-destination',
-      home,
-    ]);
-    const artifact = artifactSchema.parse(JSON.parse(packed.stdout)[0]);
-    expect(artifact.name).toBe('@davidhariri/clef');
-    checkFiles(artifact.files.map((file) => file.path));
-
-    await execute(
-      'npm',
-      [
-        'install',
-        '--global',
-        '--prefix',
-        prefix,
-        '--ignore-scripts',
-        '--no-audit',
-        '--no-fund',
-        join(home, artifact.filename),
-      ],
-      {
-        cwd: home,
-        timeout: 90_000,
-      },
-    );
-    const installation = join(prefix, 'lib/node_modules/@davidhariri/clef');
-    const manifest = JSON.parse(await readFile(join(installation, 'package.json'), 'utf8'));
-    expect(manifest.license).toBe('MIT');
-    expect(manifest.bin).toEqual({
-      clef: 'lib/server/main.js',
-    });
-    expect(manifest.scripts.preinstall).toBeUndefined();
-    expect(manifest.scripts.install).toBeUndefined();
-    expect(manifest.scripts.postinstall).toBeUndefined();
-
-    let output = '';
-    server = spawn(join(prefix, 'bin/clef'), [], {
-      cwd: home,
-      env: {
-        ...process.env,
-        CLEF_HOME: join(home, 'data'),
-        CLEF_PORT: String(await availablePort()),
-      },
-    });
-    server.stdout?.on('data', (data: Buffer) => {
-      output += data.toString();
-    });
-    let failure = '';
-    server.stderr?.on('data', (data: Buffer) => {
-      failure += data.toString();
-    });
-    server.on('error', (error) => {
-      failure += error.message;
-    });
-    await expect
-      .poll(
-        () => ({
-          ready: output.includes('Set up Clef: '),
-          exited: server?.exitCode,
-        }),
-        {
-          message: 'The installed server must start successfully',
-        },
-      )
-      .toEqual({
-        ready: true,
-        exited: null,
-      });
-    const setupUrl = /Set up Clef: (http:\/\/[^\s]+)/.exec(output)?.[1];
-    if (!setupUrl) throw new Error(`No setup link from the installed server: ${failure}`);
-
-    await page.goto(setupUrl);
-    await expect(
-      page.getByRole('button', {
-        name: 'Create account',
-      }),
-    ).toBeVisible();
-    const status = await page.request.get(new URL('/api/status', setupUrl).href);
-    expect(status.ok()).toBe(true);
-    expect(await status.json()).toMatchObject({
-      phase: 'setup',
-    });
-    for (const path of [
-      '/server/main.js',
-      '/lib/server/main.js',
-    ]) {
-      const privateCode = await page.request.get(new URL(path, setupUrl).href);
-      expect(privateCode.status()).toBe(404);
-    }
-
-    await copyFile(join(home, artifact.filename), test.info().outputPath(artifact.filename));
-  } finally {
-    if (server) await stop(server);
-    await rm(home, {
-      recursive: true,
-      force: true,
-    });
+  const started = await cli();
+  const setupUrl = /Set up Clef: (http:\/\/[^\s]+)/.exec(started.stdout)?.[1];
+  if (!setupUrl) throw new Error('The installed CLI must return a setup link and exit.');
+  await page.goto(setupUrl);
+  await expect(
+    page.getByRole('button', {
+      name: 'Create account',
+    }),
+  ).toBeVisible();
+  const status = await page.request.get(new URL('/api/status', setupUrl).href);
+  expect(status.ok()).toBe(true);
+  expect(await status.json()).toMatchObject({
+    phase: 'setup',
+  });
+  for (const path of [
+    '/server/main.js',
+    '/lib/server/main.js',
+  ]) {
+    const privateCode = await page.request.get(new URL(path, setupUrl).href);
+    expect(privateCode.status()).toBe(404);
   }
+  const firstStatus = (
+    await cli([
+      'status',
+    ])
+  ).stdout;
+  expect(firstStatus).toMatch(/Clef running \(PID \d+\)/);
+  expect((await cli()).stdout).toBe(started.stdout);
+  expect(
+    (
+      await cli([
+        'status',
+      ])
+    ).stdout,
+  ).toBe(firstStatus);
+
+  await page.getByLabel('Username').fill('package-user');
+  await page
+    .getByLabel('Password', {
+      exact: true,
+    })
+    .fill('a long package test password');
+  await page
+    .getByRole('button', {
+      name: 'Generate key',
+    })
+    .click();
+  await page.getByLabel('I saved my recovery key').check();
+  await page
+    .getByRole('button', {
+      name: 'Create account',
+    })
+    .click();
+  await expect(
+    page.getByRole('button', {
+      name: 'Sign in with ChatGPT',
+    }),
+  ).toBeVisible();
+  expect((await cli()).stdout).not.toContain('#setup=');
+
+  for (const name of [
+    'service.json',
+    'service.log',
+    'runtime.sock',
+    'owner.sqlite',
+  ]) {
+    expect((await stat(join(home, name))).mode & 0o777).toBe(0o600);
+  }
+  const log = await readFile(join(home, 'service.log'), 'utf8');
+  expect(log).not.toContain(new URL(setupUrl).hash.slice('#setup='.length));
+  expect(log).not.toContain('Set up Clef:');
+  expect((await stat(home)).mode & 0o777).toBe(0o700);
+  expect((await stat(installed.config)).mode & 0o777).toBe(0o600);
+
+  const configuration = await readFile(installed.config, 'utf8');
+  const pid = /PID (\d+)/.exec(firstStatus)?.[1];
+  if (!pid) throw new Error('No running service PID.');
+  const processCommand = (
+    await execute('ps', [
+      '-p',
+      pid,
+      '-o',
+      'command=',
+    ])
+  ).stdout;
+  expect(processCommand).toContain(process.execPath);
+  expect(processCommand).toContain(join(installed.packagePath, 'lib/server/main.js'));
+  expect(configuration).toContain(
+    process.platform === 'darwin' ? '<key>RunAtLoad</key><true/>' : 'WantedBy=default.target',
+  );
+  if (process.platform === 'linux') {
+    expect((await installed.autoStartStatus()).stdout.trim()).toBe('enabled');
+  }
+  await installed.reload();
+  await expect
+    .poll(async () =>
+      cli([
+        'status',
+      ]).then(
+        (result) => result.stdout,
+        () => '',
+      ),
+    )
+    .toMatch(/Clef running \(PID \d+\)/);
+  expect(
+    (
+      await cli([
+        'status',
+      ])
+    ).stdout,
+  ).not.toBe(firstStatus);
+  expect((await installed.nativeStatus()).stdout).toContain(installed.config);
+
+  await cli([
+    'stop',
+  ]);
+  expect(
+    (
+      await cli([
+        'status',
+      ])
+    ).stdout,
+  ).toContain('Clef stopped.');
+  await expect
+    .poll(async () =>
+      fetch(new URL('/api/status', setupUrl)).then(
+        () => true,
+        () => false,
+      ),
+    )
+    .toBe(false);
+  await installed.reinstall();
+  expect((await cli()).stdout).not.toContain('#setup=');
+  await page.context().clearCookies();
+  await page.goto(new URL('/', setupUrl).href);
+  await page.getByLabel('Username').fill('package-user');
+  await page
+    .getByLabel('Password', {
+      exact: true,
+    })
+    .fill('a long package test password');
+  await page
+    .getByRole('button', {
+      name: 'Sign in',
+      exact: true,
+    })
+    .click();
+  await expect(
+    page.getByRole('button', {
+      name: 'Sign in with ChatGPT',
+    }),
+  ).toBeVisible();
+
+  await copyFile(installed.archive, test.info().outputPath(artifact.filename));
 });

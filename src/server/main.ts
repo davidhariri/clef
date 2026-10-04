@@ -1,31 +1,28 @@
 #!/usr/bin/env node
-import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createApp } from './app.js';
+import { runCli } from './lifecycle/index.js';
 
-const home = process.env.CLEF_HOME ?? join(homedir(), '.local', 'share', 'clef');
-const port = Number(process.env.CLEF_PORT ?? 3737);
-if (!Number.isInteger(port) || port < 1 || port > 65535)
-  throw new Error('CLEF_PORT must be a port number.');
-const application = await createApp({
-  home,
-});
-const url = await application.server.listen({
-  port,
-  host: '127.0.0.1',
-});
-console.info(
-  application.needsSetup ? `Set up Clef: ${url}/#setup=${application.setupToken}` : `Clef: ${url}`,
-);
-console.info(`Data: ${home}`);
-for (const signal of [
-  'SIGINT',
-  'SIGTERM',
-] as const) {
-  process.once(signal, () => {
-    application.server.close().then(
-      () => process.exit(0),
-      () => process.exit(1),
-    );
+try {
+  await runCli(fileURLToPath(import.meta.url), async (home, port) => {
+    const application = await createApp({
+      home,
+    });
+    try {
+      const url = await application.server.listen({
+        port,
+        host: '127.0.0.1',
+      });
+      return {
+        url: () => application.entryUrl(url),
+        close: () => application.server.close(),
+      };
+    } catch (error) {
+      await application.server.close();
+      throw error;
+    }
   });
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
 }
