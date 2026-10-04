@@ -11,6 +11,7 @@ import {
   DialogTrigger,
 } from '../components/upstream/shadcn-ui/components/ui/dialog.js';
 import { Connections, ModelDefaults } from '../models/index.js';
+import { TelegramSettings } from '../telegram/index.js';
 
 const groups = [
   {
@@ -23,6 +24,7 @@ const groups = [
   {
     label: 'System',
     sections: [
+      'Channels',
       'Tools',
     ],
   },
@@ -58,7 +60,7 @@ export function Settings({ refresh }: { refresh: () => Promise<void> }) {
         <DialogHeader className="border-b px-6 py-5 pr-12 text-left">
           <DialogTitle>Settings</DialogTitle>
           <DialogDescription className="sr-only">
-            Manage model defaults, provider connections, tools, and your account.
+            Manage model defaults, provider connections, channels, tools, and your account.
           </DialogDescription>
         </DialogHeader>
         <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
@@ -94,6 +96,12 @@ export function Settings({ refresh }: { refresh: () => Promise<void> }) {
               <ModelDefaults connections={() => setSection('Connections')} />
             )}
             {section === 'Connections' && <Connections refresh={refresh} />}
+            {section === 'Channels' && (
+              <div className="grid gap-4">
+                <h2 className="text-xl font-semibold">Channels</h2>
+                <TelegramSettings />
+              </div>
+            )}
             {section === 'Tools' && (
               <div className="grid gap-4">
                 <h2 className="text-xl font-semibold">Tools</h2>

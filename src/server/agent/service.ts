@@ -111,6 +111,46 @@ export class Agent {
     }
   }
 
+  async reply(requestId: string): Promise<
+    | {
+        state: 'missing' | 'pending' | 'unanswered';
+      }
+    | {
+        state: 'done';
+        text: string;
+      }
+  > {
+    if (!this.conversation)
+      return {
+        state: 'missing',
+      };
+    const conversation = await this.require();
+    const submission = await conversation.commit(
+      (transaction) => transaction.submissionByRequest(conversation.id, requestId),
+      context,
+    );
+    if (!submission)
+      return {
+        state: 'missing',
+      };
+    if (submission.status === 'unanswered')
+      return {
+        state: 'unanswered',
+      };
+    if (submission.status !== 'done' || !submission.answer)
+      return {
+        state: 'pending',
+      };
+    const snapshot = await this.snapshot();
+    const messages = snapshot.messages.filter(
+      (message) => message.role === 'assistant' && message.id.startsWith(`${submission.answer}:`),
+    );
+    return {
+      state: 'done',
+      text: messages.map((message) => message.text).join('\n'),
+    };
+  }
+
   async stop(): Promise<void> {
     const conversation = await this.require();
     await conversation.abort(context);

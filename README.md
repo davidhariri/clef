@@ -34,7 +34,7 @@ Those projects are awesome. So awesome that they are overwhelming! At least to m
 
 ## Settings
 
-Open **Settings** from chat. Use the grouped navigation to select **Default model**, **Connections**, **Tools**, or **Account**. Save changes without closing the dialog. Use Close or Escape to return to chat.
+Open **Settings** from chat. Use the grouped navigation to select **Default model**, **Connections**, **Channels**, **Tools**, or **Account**. Save changes without closing the dialog. Use Close or Escape to return to chat.
 
 Under **Connections**, select a provider to view its status and connection form. OpenAI offers ChatGPT sign-in and API-key entry. These methods share one OpenAI connection; connecting either method replaces the current one. ChatGPT subscription access and OpenAI API billing are separate.
 
@@ -47,6 +47,20 @@ The **Clef server**, not your browser, must be able to reach this URL. `localhos
 Clef discovers installed local chat models. Embedding models and cloud aliases are not offered. Use an Ollama version that reports `thinking.values` from `/api/show` for thinking models. Only supported Clef thinking levels are offered. For boolean-only thinking controls, `medium` turns thinking on and `off` turns it off.
 
 Choose a model and thinking level in **Settings > Default model**. Changed defaults apply to your next message. An active reply keeps its current model. The server URL and defaults survive restarts. Changing the server URL changes the destination for all Ollama conversations. Connect again to refresh the installed model list. Clef also discovers models at startup; a discovery failure keeps your settings and is shown in Settings. Clef never switches providers to recover from a failure.
+
+## Telegram
+
+Telegram is optional and off by default. It needs no extra package, public port, or webhook.
+
+1. Create a separate bot with [@BotFather](https://t.me/BotFather) in Telegram. Copy its bot token.
+2. Open **Settings > Channels > Telegram** in Clef. Enter the token and select **Connect Telegram**.
+3. Select **Open Telegram to pair**, then press **Start** in Telegram. Keep this one-time link private. It expires after ten minutes.
+
+Send text to the bot from your paired account. It uses the same conversation and model as web chat. Use the web app to stop a reply, approve a requested model change, or change settings. Telegram messages cannot grant permission. If the pairing link expires or Clef restarts before pairing, select **New pairing link**. Select **Disconnect Telegram** to remove the connection and its saved token.
+
+Only one private Telegram account can use the bot. Groups, voice notes, and attachments are not supported. Messages pass through Telegram and your selected model. Telegram bot chats are not end-to-end encrypted. Keep the Clef server running to receive messages.
+
+See [channel behavior and delivery limits](ARCHITECTURE.md#telegram-channel).
 
 ## Features
 

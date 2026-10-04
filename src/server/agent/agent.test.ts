@@ -32,6 +32,7 @@ it('streams one saved reply, deduplicates input, and restores the conversation a
       ]);
       return fauxAssistantMessage('Hello from the test model.');
     },
+    fauxAssistantMessage('A later reply.'),
   ]);
   const models = await openModels(installation.database, credentials.store, installation.settings, [
     provider.provider,
@@ -56,11 +57,28 @@ it('streams one saved reply, deduplicates input, and restores the conversation a
       'Hello',
       'Hello from the test model.',
     ]);
+    expect(await agent.reply(id)).toEqual({
+      state: 'done',
+      text: 'Hello from the test model.',
+    });
+    expect(await agent.reply(crypto.randomUUID())).toEqual({
+      state: 'missing',
+    });
+    await agent.send('A later message', crypto.randomUUID(), settings);
+    await vi.waitFor(async () => expect((await agent.snapshot()).busy).toBe(false));
+    expect(await agent.reply(id)).toEqual({
+      state: 'done',
+      text: 'Hello from the test model.',
+    });
     await agent.close();
     const reopened = await openInstallation(installation.home);
     const restored = await openAgent(reopened.database, models, installation.settings, permissions);
     try {
-      expect((await restored.snapshot()).messages).toHaveLength(2);
+      expect((await restored.snapshot()).messages).toHaveLength(4);
+      expect(await restored.reply(id)).toEqual({
+        state: 'done',
+        text: 'Hello from the test model.',
+      });
     } finally {
       await restored.close();
       await reopened.database.close();
