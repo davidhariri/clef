@@ -65,7 +65,7 @@ This is not the complete agent MVP. Keep these limits explicit:
 - **One live ChatGPT connection is verified.** On 2026-10-03, David completed sign-in. Read-only inspection confirmed an encrypted OpenAI OAuth credential and a successful `openai-responses` reply from `gpt-6-luna`, with no recorded authentication error. No token values were printed. Token refresh, expired or revoked credentials, and other accounts remain unverified. Automated tests still use controlled external provider behavior with the real server, storage, harness, and browser.
 - **Model defaults need review.** The current rule prefers `gpt-6-luna` when available, otherwise the first available model of the explicitly connected provider. It uses medium thinking when supported. These are provisional choices, not agreed product defaults. Existing defaults never switch when another provider connects.
 - **Deployment is local only.** Container packaging, remote access, local-model setup, MCP, desktop and mobile apps, and host computer use remain unfinished. Single-process database ownership is an operating requirement, not yet an enforced process lock.
-- **Release work remains.** Provider connection cancellation and all provider prompt variants need coverage. The public repository still needs a license decision. This build is not a security audit.
+- **Release work remains.** Provider connection cancellation and all provider prompt variants need coverage. Clef-owned code uses the MIT license. Third-party components keep their own licenses. This build is not a security audit.
 
 ## Decision status
 
