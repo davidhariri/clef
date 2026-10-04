@@ -65,12 +65,14 @@ async function openConnections(page: Page) {
     })
     .click();
   await page
-    .getByText('Manage connections', {
+    .getByRole('button', {
+      name: 'Manage connections',
       exact: true,
     })
     .click();
   await page
-    .getByText('Use local Ollama', {
+    .getByRole('button', {
+      name: 'Ollama',
       exact: true,
     })
     .click();
@@ -265,7 +267,8 @@ test('connects Ollama in web setup without a key and streams through the selecte
     })
     .click();
   await page
-    .getByText('Use local Ollama', {
+    .getByRole('button', {
+      name: 'Ollama',
       exact: true,
     })
     .click();
@@ -371,6 +374,15 @@ test('persists the Ollama endpoint and applies saved defaults to the next messag
       name: 'Save defaults',
     })
     .click();
+  await expect(page.getByRole('status')).toHaveText(
+    'Defaults saved. Applies to your next message.',
+  );
+  await page
+    .getByRole('button', {
+      name: 'Close',
+      exact: true,
+    })
+    .click();
   await expect(
     page.getByText('test-model', {
       exact: true,
@@ -416,6 +428,9 @@ test('persists the Ollama endpoint and applies saved defaults to the next messag
       name: 'Save defaults',
     })
     .click();
+  await expect(page.getByRole('status')).toHaveText(
+    'Defaults saved. Applies to your next message.',
+  );
   await clef.restart();
   await page.reload();
 
@@ -496,7 +511,8 @@ test('keeps the selected provider and explains an Ollama outage across restart',
     })
     .click();
   await page
-    .getByText('Use local Ollama', {
+    .getByRole('button', {
+      name: 'Ollama',
       exact: true,
     })
     .click();

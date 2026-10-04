@@ -24,6 +24,12 @@ test('sets up the account, completes provider sign-in, and signs back in', async
     .click();
   await page
     .getByRole('button', {
+      name: 'OpenAI',
+      exact: true,
+    })
+    .click();
+  await page
+    .getByRole('button', {
       name: 'Sign in with ChatGPT',
     })
     .click();
@@ -42,6 +48,12 @@ test('sets up the account, completes provider sign-in, and signs back in', async
   await page
     .getByRole('button', {
       name: 'Settings',
+    })
+    .click();
+  await page
+    .getByRole('button', {
+      name: 'Account',
+      exact: true,
     })
     .click();
   await page

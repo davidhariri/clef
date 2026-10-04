@@ -297,7 +297,7 @@ The models repository owns the Ollama URL. Startup discovers models again, with 
 
 The URL is reached by the Clef server, not the browser. Unauthenticated HTTP is suitable only for a trusted network, not a public endpoint. Clef offers installed local chat models, not cloud aliases. Thinking controls come from Ollama's model metadata and use Pi's supported thinking-level map.
 
-Clef defines a default model and thinking level for each supported provider. At **Settings > Models > Default**, provide provider and model dropdowns and a thinking-level selector. Only offer models and thinking levels supported by the selected provider connection. Preserve the user's choice; never silently switch providers.
+Clef defines a default model and thinking level for each supported provider. The [web settings](README.md#settings) offer only models and thinking levels supported by the selected provider connection. Preserve the user's choice; never silently switch providers.
 
 ## Data and access
 

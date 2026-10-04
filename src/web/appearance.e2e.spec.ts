@@ -121,6 +121,56 @@ for (const scheme of [
       contentType: 'image/png',
     });
 
+    await page.setViewportSize({
+      width: 390,
+      height: 844,
+    });
+    const dialog = page.getByRole('dialog', {
+      name: 'Settings',
+    });
+    await dialog
+      .getByRole('button', {
+        name: 'Connections',
+        exact: true,
+      })
+      .click();
+    await dialog
+      .getByRole('button', {
+        name: 'Ollama',
+        exact: true,
+      })
+      .click();
+    const serverUrl = dialog.getByLabel('Ollama server URL');
+    await expect(serverUrl).toBeInViewport();
+    await expect(serverUrl).toHaveCSS('color-scheme', scheme);
+    expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
+      true,
+    );
+    const bounds = await dialog.boundingBox();
+    expect(bounds).not.toBeNull();
+    expect(bounds?.x).toBeGreaterThanOrEqual(0);
+    expect((bounds?.x ?? 0) + (bounds?.width ?? 0)).toBeLessThanOrEqual(390);
+    await dialog
+      .getByRole('button', {
+        name: 'Connect Ollama',
+        exact: true,
+      })
+      .scrollIntoViewIfNeeded();
+    await expect(
+      dialog.getByRole('button', {
+        name: 'Connect Ollama',
+        exact: true,
+      }),
+    ).toBeInViewport();
+    await test.info().attach(`settings-mobile-${scheme}`, {
+      body: await page.screenshot(),
+      contentType: 'image/png',
+    });
+    await page.emulateMedia({
+      colorScheme: scheme === 'light' ? 'dark' : 'light',
+    });
+    await expect(serverUrl).toHaveCSS('color-scheme', scheme === 'light' ? 'dark' : 'light');
+
     await page.evaluate(() =>
       document.documentElement.style.setProperty('--background', 'rgb(40, 50, 60)'),
     );
