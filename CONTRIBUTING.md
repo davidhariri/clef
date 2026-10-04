@@ -31,16 +31,18 @@ Biome is the only formatter and linter. The VS Code settings enable format-on-sa
 
 Use a small red–green–refactor cycle:
 
-1. Add one failing test through the feature's public interface. Confirm the intended failure.
+1. Add or extend one test through the feature's public interface. Confirm that it fails for the intended reason before changing production code.
 2. Add the smallest complete behavior that passes.
-3. Refactor while the tests pass.
-4. Add or extend a colocated Playwright test for user-visible behavior.
+3. Refactor while the tests pass. Remove obsolete code and tests for behavior that was replaced.
 
-Keep feature tests with their server or web feature. Unit and integration tests use `*.test.ts`. Browser E2E tests use `*.e2e.spec.ts`. The test runners discover these files automatically. Keep shared test infrastructure, architecture checks, and cross-cutting package tests in root `tests/`.
+Select coverage by risk, not by file or layer:
 
-Build with `npm run build` before a focused E2E run. Tests serve the compiled web app; they do not rebuild it themselves. Rebuild after a web change. The full check always builds before E2E tests.
+- Use the lowest test level that can expose the failure reliably. Do not repeat the same cases at each layer unless they cover distinct risks.
+- Use Playwright for critical user journeys and browser-specific failures. A user-visible change does not automatically need a new E2E test.
+- Keep regression coverage for defects and strong coverage for authentication, permission denial, secret handling, persistence, reconnect, cancellation, and restart as those paths are built.
+- Extend existing coverage before adding a suite. Remove redundant tests only when retained coverage protects the same behavior. Do not retest library internals or standard formatter and type-checker behavior; test Clef-specific policy where it adds protection.
 
-E2E tests must run the real application and server. For repeatable model tests, control the external provider boundary. Do not replace the UI, message service, permission service, or harness with mocks. Each test gets a separate data directory and local server. The web app is the working client and the interface for agent behavior tests. Test real provider sign-in and inference separately; report that evidence separately.
+Keep tests with the owning feature; see [test placement](AGENTS.md#one-server-structure). Keep cross-cutting package tests in root `tests/`. E2E tests must run the real application and server, with separate data directories and local servers. For repeatable model tests, control the external provider boundary; do not mock the UI, feature operations, or harness. Use the web app for agent behavior tests. Verify real provider sign-in and inference separately, and report only what was verified.
 
 ## Check a change
 
@@ -64,7 +66,7 @@ npm run check:fast
 
 `format` applies Biome formatting and safe fixes. `check:fast` runs lint, formatting checks, dependency boundaries, TypeScript, and all unit/integration tests. It does not build the app or run E2Es.
 
-For a focused E2E run, build first:
+For a focused E2E run, build first. Tests serve the compiled web app and do not rebuild it. Rebuild after web changes:
 
 ```sh
 npm run build
@@ -90,7 +92,7 @@ git diff --cached --check
 
 Review staged, unstaged, and untracked files before choosing this path. Review the documentation diff and verify changed link targets and heading anchors. Prose-only edits do not need application checks. Runtime prompts, test fixtures, and other executable inputs are not documentation-only, even when stored in Markdown files.
 
-Do not use `.only`, `.skip`, suppression comments, relaxed rules, or changed expectations to hide a failure. Fix the cause. If a dependency blocks verification, report the blocker and mark the work incomplete.
+Do not use `.only`, `.skip`, suppression comments, relaxed rules, or changed expectations to hide a failure. Fix the cause. A failing test is allowed during TDD's red step, not at completion. If a dependency blocks verification, report the exact blocker and mark the work incomplete.
 
 ## Package and release
 
@@ -132,12 +134,13 @@ Use functional copy. Remove decorative taglines, not useful security notices or 
 
 ## Review a change
 
-- Does one feature own each operation and data set?
-- Do imports use the public interface rather than private files?
-- Are routes thin, contracts browser-safe, and database queries local to their owner?
-- Does the file tree stay inside the feature unless a public contract or application wiring changed?
-- Do tests cover successful work, denied access, cancellation, and relevant failure paths?
+Keep each PR to one behavior change or one focused maintenance task. Include cleanup needed for that change; keep unrelated cleanup separate. Do not use line-count quotas or compressed code to make a diff look smaller.
 
-Do not add placeholder layers or split files only to meet a size limit. Prefer a few focused files behind a small interface. Do not add Clef-owned code comments; express behavior in names, types, and tests. Preserve comments and legal notices in copied upstream sources. Keep architectural explanations in documentation.
+- Does the change extend the owning feature through its public interface, without duplicate operations or unnecessary layers?
+- Does each added test protect a distinct behavior or risk? Can existing setup or coverage be reused without hiding the test's purpose?
+- Does each documentation edit correct or add a necessary fact in its owning document? Omit routine implementation summaries.
+- Can the reviewer understand the change without following unrelated edits? Explain necessary cross-feature changes.
+
+Keep the PR summary to three points: what changed, the main risk, and how it was verified. Include failed or blocked checks. A short summary does not replace readable code and tests.
 
 CI runs the same full check on pull requests and pushes to `main`. Feature-branch pushes do not duplicate the PR check. A CI workflow does not itself prevent direct pushes or merges; repository protection must require its result. Changes to protection settings require David's approval.
