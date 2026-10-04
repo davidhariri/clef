@@ -6,7 +6,7 @@
 - Use Pi Durable as the agent harness and Pi Codemode for restricted JavaScript execution.
 - Prefer secure-by-default in-process execution. Future VMs are optional workers for delegated subagent tasks, not the main agent's required home.
 - Use local SQLite for structured server state and a persistent folder or volume for workspace files.
-- Route client-agent interaction through the Clef API. Do not add a separate agent loop to the CLI or apps.
+- Route client-agent interaction through the Clef API. Do not add a separate agent loop to the web or native apps. Use the web app as the minimum interface for testing agent behavior; do not maintain a separate CLI chat client.
 
 ## One server structure
 

@@ -137,6 +137,17 @@ it('allows public feature interfaces and browser-safe contracts', async () => {
   expect(result.status).toBe(0);
 });
 
+it('keeps the web app as the only executable client', async () => {
+  expect((await readdir('src')).sort()).toEqual([
+    'client',
+    'server',
+    'web',
+  ]);
+  expect(await readdir('src/client')).toEqual([
+    'api.ts',
+  ]);
+});
+
 it('keeps server code inside feature folders and exposes a public interface for each feature', async () => {
   const entries = await readdir('src/server', {
     withFileTypes: true,

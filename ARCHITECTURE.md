@@ -4,7 +4,6 @@ This document defines the target structure and its rules. See [First implementat
 
 ```mermaid
 flowchart TB
-    tui["CLI chat TUI"] <--> api
     apps["Desktop and mobile apps"] <--> api
     web["Web app · Chat and management"] <--> api
 
@@ -77,7 +76,7 @@ Use only files that have a distinct responsibility. Do not require every operati
 ```mermaid
 flowchart LR
     app["app.ts · Connect dependencies"] --> entry["Feature index.ts"]
-    client["Web / CLI"] --> contract["Feature contract.ts"]
+    client["Web app"] --> contract["Feature contract.ts"]
     client -->|HTTP| routes["Feature routes.ts"]
     routes --> service["Feature service.ts"]
     service --> model["Feature model.ts"]
@@ -135,11 +134,11 @@ Copied source versions, licenses, and integration changes are recorded in [UPSTR
 
 ## Client interface
 
-Clef defines its own API. The web app, chat TUI, desktop apps, and mobile apps use this API to talk to the running server. Local use does not require a gateway.
+Clef defines its own API. The web app uses this API to talk to the running server. Planned desktop and mobile apps will use the same API. Local use does not require a gateway.
 
 The web app is a first-class agent interface for desktop browsers, not only a management console. Users can talk to the agent without a separate desktop app. Agent work runs in the server, not the browser.
 
-Maintain the CLI chat TUI as the minimum agent interface. Use it to test agent behavior through the same API as the apps. The TUI does not run a separate agent loop or open Pi Durable storage.
+Use the web app as the minimum agent interface and the interface for testing agent behavior. Do not maintain a separate CLI chat client. Clients do not run an agent loop or open Pi Durable storage. `src/client/api.ts` contains the browser-safe HTTP request helper used by the web app.
 
 Keep the API independent of Pi Durable's internal event and storage formats. The server maps client requests and updates to the harness. Clients must not depend on the harness's internal types.
 
@@ -151,7 +150,7 @@ Sessions use random tokens. SQLite stores token hashes, not raw tokens. Browser 
 
 Conversation commands use HTTP JSON. SSE sends validated full snapshots, so a reconnect does not depend on an in-memory event history. The client keeps the selected conversation in the URL fragment. Send requests carry an ID for duplicate prevention. Each conversation keeps its selected model; changed defaults apply to new conversations only. Stop cancels active work but cannot undo completed actions.
 
-The terminal uses Pi TUI and the same HTTP/SSE API. It keeps its session cookie in process memory, masks password input, and removes terminal control sequences from model text. The browser renders Markdown without raw HTML and does not automatically fetch model-supplied external images. These controls reduce specific risks; they are not a complete security guarantee.
+The browser renders Markdown without raw HTML and does not automatically fetch model-supplied external images. These controls reduce specific risks; they are not a complete security guarantee.
 
 ## Code execution and permissions
 

@@ -27,7 +27,7 @@ Dependable execution is a release requirement, not a competitive differentiator.
 
 ## Engineering constraints
 
-- Use TypeScript for the server and agent core. Keep this repo focused on the service, web app, and CLI chat TUI. First-party desktop and mobile apps are part of the product; their implementation and repo placement remain undecided.
+- Use TypeScript for the server and agent core. Keep this repo focused on the service and web app. First-party desktop and mobile apps are part of the product; their implementation and repo placement remain undecided.
 - Use Pi Durable as the agent harness and Pi Codemode for restricted JavaScript execution. The first MVP does not include a host shell, Just Bash, or VM workers.
 - Use local SQLite for structured runtime state, including accounts, sessions, traces, analytics events, messages, encrypted secrets, and Pi Durable task state. Keep skills, projects, notes, and other files in a persistent folder or volume.
 - Store non-secret configuration in files as the source of truth, not in a second settings store in SQLite. Configurations contain references to one shared encrypted secret store, never secret values. Trusted server code resolves these references only for authorized operations.
@@ -39,8 +39,8 @@ Dependable execution is a release requirement, not a competitive differentiator.
 - Add VM workers later for bounded subagent tasks that need browser use, computer control, or a separate OS isolation boundary. Grant only the data and capabilities needed for the task.
 - On first startup, print a protected web setup link. Use two onboarding steps: account and encryption, then model provider.
 - Support ChatGPT and OpenRouter sign-in, plus API keys for Anthropic, OpenAI, OpenRouter, and other supported Pi providers. Supply provider-specific model and thinking defaults, editable at Settings > Models > Default.
-- Define a Clef API shared by the web app, chat TUI, and desktop and mobile apps. Local clients connect to the server without a gateway.
-- Maintain a CLI chat TUI as the minimum interface for testing agent behavior. Keep the agent loop and stored state in the server.
+- Define a Clef API shared by the web app and planned desktop and mobile apps. Local clients connect to the server without a gateway.
+- Use the web app as the minimum interface for testing agent behavior. Do not maintain a separate CLI chat client. Keep the agent loop and stored state in the server.
 - Support a Linux container installation through Docker, including OrbStack on macOS and Linux cloud VMs such as DigitalOcean Droplets.
 - Support direct installation on Linux and macOS without a container. Do not provide direct Windows support.
 - Make the greater host-access risk of direct installation clear. A container is not a VM and does not protect resources explicitly exposed to it.
@@ -52,7 +52,7 @@ Dependable execution is a release requirement, not a competitive differentiator.
 
 ## First implementation
 
-The working chat slice includes account setup, encrypted provider credentials, key recovery, provider sign-in orchestration, model settings, persisted conversations, streaming updates, Stop, web chat, and terminal chat. Each server feature owns its behavior and tests. Import and layout checks enforce the module structure.
+The working chat slice includes account setup, encrypted provider credentials, key recovery, provider sign-in orchestration, model settings, persisted conversations, streaming updates, Stop, and web chat. Each server feature owns its behavior and tests. Import and layout checks enforce the module structure.
 
 The web UI uses AI Elements for messages, scrolling, and prompt input, with shadcn/ui controls and dialogs. It keeps the Clef API and server-side agent loop. Web feature boundaries, global CSS placement, and a cognitive-complexity limit of 15 are enforced. Copied UI source versions and exceptions are recorded in `src/web/components/upstream/UPSTREAM.md`.
 
@@ -62,7 +62,7 @@ This is not the complete agent MVP. Keep these limits explicit:
 
 - **Self-configuration is planned.** Model defaults and saved permission rules are currently in SQLite. File-backed configuration, generic secret references, and validated live activation are not implemented yet.
 - **Code execution is disabled.** Pi Codemode `1.0.1` exposes time and guest-memory limits, but no host-output byte limit. Its `dist/runtime/host.js` appends each output item to a host array. Cutting the returned result cannot prevent this accumulation. Obtain a bounded runtime before exposing scripts. The permission service is tested, but is not connected to executable tools or an approval UI yet.
-- **One live ChatGPT connection is verified.** On 2026-10-03, David completed sign-in. Read-only inspection confirmed an encrypted OpenAI OAuth credential and a successful `openai-responses` reply from `gpt-6-luna`, with no recorded authentication error. No token values were printed. Token refresh, expired or revoked credentials, and other accounts remain unverified. Automated tests still use controlled external provider behavior with the real server, storage, harness, browser, and terminal.
+- **One live ChatGPT connection is verified.** On 2026-10-03, David completed sign-in. Read-only inspection confirmed an encrypted OpenAI OAuth credential and a successful `openai-responses` reply from `gpt-6-luna`, with no recorded authentication error. No token values were printed. Token refresh, expired or revoked credentials, and other accounts remain unverified. Automated tests still use controlled external provider behavior with the real server, storage, harness, and browser.
 - **Model defaults need review.** The current rule prefers `gpt-6-luna` when available, otherwise the first available model of the explicitly connected provider. It uses medium thinking when supported. These are provisional choices, not agreed product defaults. Existing defaults never switch when another provider connects.
 - **Deployment is local only.** Container packaging, remote access, local-model setup, MCP, desktop and mobile apps, and host computer use remain unfinished. Single-process database ownership is an operating requirement, not yet an enforced process lock.
 - **Release work remains.** Provider connection cancellation and all provider prompt variants need coverage. The public repository still needs a license decision. This build is not a security audit.

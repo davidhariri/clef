@@ -95,7 +95,7 @@ module.exports = {
       name: 'clients-only-import-contracts',
       severity: 'error',
       from: {
-        path: '^src/(web/|client/|cli\\.ts)',
+        path: '^src/(web|client)/',
       },
       to: {
         path: '^src/server/',
@@ -106,7 +106,7 @@ module.exports = {
       name: 'clients-never-import-the-harness',
       severity: 'error',
       from: {
-        path: '^src/(web/|client/|cli\\.ts)',
+        path: '^src/(web|client)/',
       },
       to: {
         path: 'node_modules/@earendil-works/pi-(durable|ai|codemode)',

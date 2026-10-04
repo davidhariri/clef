@@ -1,10 +1,9 @@
 import { z } from 'zod';
 
-export type RequestOptions = {
+type RequestOptions = {
   body?: Record<string, unknown>;
   method?: string;
   headers?: Record<string, string>;
-  onResponse?: (response: Response) => void;
 };
 
 export async function request<T>(
@@ -21,7 +20,6 @@ export async function request<T>(
   };
   if (options.body) init.body = JSON.stringify(options.body);
   const response = await fetch(path, init);
-  options.onResponse?.(response);
   const data: unknown = await response.json();
   if (!response.ok) {
     const error = z

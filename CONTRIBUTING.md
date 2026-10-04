@@ -1,6 +1,6 @@
 # Contributing
 
-Use Node 24 LTS, npm, and Python 3.11 or newer. The terminal E2E driver uses Python's standard pseudo-terminal library. Install dependencies and the test browser:
+Use Node 24 LTS and npm. Install dependencies and the test browser:
 
 ```sh
 npm ci
@@ -31,7 +31,7 @@ Keep feature tests with their server or web feature. Unit and integration tests 
 
 Build with `npm run build` before a focused E2E run. Tests serve the compiled web app; they do not rebuild it themselves. Rebuild after a web change. The full check always builds before E2E tests.
 
-E2E tests must run the real application and server. For repeatable model tests, control the external provider boundary. Do not replace the UI, message service, permission service, or harness with mocks. Each test gets a separate data directory and local server. Terminal E2E tests run the real CLI in a pseudo-terminal and verify that it shares state with the browser. Keep terminal-specific tests under `src/client/`. Test real provider sign-in and inference separately; report that evidence separately.
+E2E tests must run the real application and server. For repeatable model tests, control the external provider boundary. Do not replace the UI, message service, permission service, or harness with mocks. Each test gets a separate data directory and local server. The web app is the working client and the interface for agent behavior tests. Test real provider sign-in and inference separately; report that evidence separately.
 
 ## Check a change
 
