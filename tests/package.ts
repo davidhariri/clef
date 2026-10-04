@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { once } from 'node:events';
-import { appendFile, mkdir, mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, readFile, realpath, rm, symlink } from 'node:fs/promises';
 import { type AddressInfo, createServer } from 'node:net';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -69,8 +69,10 @@ async function stopLaunchAgent(target: string) {
   ).rejects.toHaveProperty('code', 113);
 }
 
-async function install(root: string) {
+async function installation(root: string, packaged: Awaited<ReturnType<typeof installPackage>>) {
   const prefix = join(root, 'install');
+  await symlink(packaged.prefix, prefix, 'dir');
+  const bin = join(prefix, 'bin/clef');
   const home = join(root, 'data');
   const port = await availablePort();
   const environment = {
@@ -96,53 +98,19 @@ async function install(root: string) {
       config,
       name,
       port,
+      prefix,
+      packagePath: packaged.packagePath,
     })}\n`,
   );
-  const packed = await execute('npm', [
-    'pack',
-    '--ignore-scripts',
-    '--json',
-    '--pack-destination',
-    root,
-  ]);
-  const artifact = artifactSchema.parse(JSON.parse(packed.stdout)[0]);
-  const archive = join(root, artifact.filename);
-  const reinstall = () =>
-    execute(
-      'npm',
-      [
-        'install',
-        '--global',
-        '--prefix',
-        prefix,
-        '--ignore-scripts',
-        '--no-audit',
-        '--no-fund',
-        archive,
-      ],
-      {
-        cwd: root,
-        timeout: 90_000,
-      },
-    );
-  await reinstall();
-  const bin = join(prefix, 'bin/clef');
-  const packagePath = join(prefix, 'lib/node_modules/@davidhariri/clef');
-  const manifest = JSON.parse(await readFile(join(packagePath, 'package.json'), 'utf8'));
-
   return {
+    ...packaged,
     root,
     prefix,
     home,
     port,
     environment,
     config,
-    archive,
-    artifact,
-    manifest,
     bin,
-    packagePath,
-    reinstall,
     cli: (args: string[] = [], env: NodeJS.ProcessEnv = {}) =>
       execute(bin, args, {
         cwd: root,
@@ -237,15 +205,79 @@ async function install(root: string) {
   };
 }
 
-export const test = base.extend<{
-  installed: Awaited<ReturnType<typeof install>>;
-}>({
-  installed: [
-    async ({ baseURL: _baseURL }, use) => {
-      const root = await realpath(await mkdtemp(join(tmpdir(), 'clef &$%-')));
-      let installed: Awaited<ReturnType<typeof install>> | undefined;
+async function installPackage(root: string) {
+  const prefix = join(root, 'install');
+  const packed = await execute('npm', [
+    'pack',
+    '--ignore-scripts',
+    '--json',
+    '--pack-destination',
+    root,
+  ]);
+  const artifact = artifactSchema.parse(JSON.parse(packed.stdout)[0]);
+  const archive = join(root, artifact.filename);
+  const reinstall = () =>
+    execute(
+      'npm',
+      [
+        'install',
+        '--global',
+        '--prefix',
+        prefix,
+        '--ignore-scripts',
+        '--no-audit',
+        '--no-fund',
+        archive,
+      ],
+      {
+        cwd: root,
+        timeout: 90_000,
+      },
+    );
+  await reinstall();
+  const packagePath = join(prefix, 'lib/node_modules/@davidhariri/clef');
+  const manifest = JSON.parse(await readFile(join(packagePath, 'package.json'), 'utf8'));
+  return {
+    prefix,
+    archive,
+    artifact,
+    manifest,
+    packagePath,
+    reinstall,
+  };
+}
+
+export const test = base.extend<
+  {
+    installed: Awaited<ReturnType<typeof installation>>;
+  },
+  {
+    packaged: Awaited<ReturnType<typeof installPackage>>;
+  }
+>({
+  packaged: [
+    async ({ browserName: _browserName }, use) => {
+      const root = await realpath(await mkdtemp(join(tmpdir(), 'clef npm &$%-')));
       try {
-        installed = await install(root);
+        await use(await installPackage(root));
+      } finally {
+        await rm(root, {
+          recursive: true,
+          force: true,
+        });
+      }
+    },
+    {
+      scope: 'worker',
+      timeout: 120_000,
+    },
+  ],
+  installed: [
+    async ({ packaged }, use) => {
+      const root = await realpath(await mkdtemp(join(tmpdir(), 'clef &$%-')));
+      let installed: Awaited<ReturnType<typeof installation>> | undefined;
+      try {
+        installed = await installation(root, packaged);
         await use(installed);
       } finally {
         if (installed) await installed.dispose();

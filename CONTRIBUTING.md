@@ -98,7 +98,7 @@ The npm package is `@davidhariri/clef`. Its `clef` executable manages the native
 
 `npm run build` creates server JavaScript in `lib/` and the web app in `dist/`. Only those outputs, the installation guide, and license notices are included with npm's required package metadata and README. Web and build dependencies stay in `devDependencies`. Keep install lifecycle scripts absent; users must be able to install with `--ignore-scripts`. `prepack` builds local source before ordinary packaging.
 
-The full E2E command includes the `app` and `package` projects. Package and lifecycle tests create tarballs, check package contents, install into isolated global prefixes with scripts disabled, and invoke `clef` outside the source checkout. Each test gets unique data, a free loopback port, a native service identity, and a service configuration path. Tests remove only their own resources. These tests need npm registry access or a sufficient npm cache.
+The full E2E command includes the `app` and `package` projects. Package and lifecycle tests pack and install Clef once per worker, with scripts disabled, then invoke the installed CLI outside the source checkout. Each test has its own temporary prefix link to that installed package, unique data, a free loopback port, a native service identity, and a service configuration path. Test services stop before the shared package is removed. The update test still reinstalls the archive explicitly. These tests need npm registry access or a sufficient npm cache.
 
 The package test uses the real web setup and sign-in pages. It checks CLI exit, repeated start, status, stop, native configuration reload, and account preservation across an archive reinstall. Lifecycle tests cover unavailable managers, conflicts, failed registration, failed application startup, duplicate ownership, and native crash recovery. Controlled failures replace only native host commands, not the app or storage. No live model call is made.
 
@@ -140,4 +140,4 @@ Use functional copy. Remove decorative taglines, not useful security notices or 
 
 Do not add placeholder layers or split files only to meet a size limit. Prefer a few focused files behind a small interface. Do not add Clef-owned code comments; express behavior in names, types, and tests. Preserve comments and legal notices in copied upstream sources. Keep architectural explanations in documentation.
 
-CI runs the same full check. A CI workflow does not itself prevent direct pushes or merges; repository protection must require its result. Changes to protection settings require David's approval.
+CI runs the same full check on pull requests and pushes to `main`. Feature-branch pushes do not duplicate the PR check. A CI workflow does not itself prevent direct pushes or merges; repository protection must require its result. Changes to protection settings require David's approval.
