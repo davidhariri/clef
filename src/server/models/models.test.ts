@@ -1,60 +1,114 @@
-import { fauxProvider } from '@earendil-works/pi-ai';
-import { expect, it } from 'vitest';
-import { testInstallation } from '../../../tests/installation.js';
-import { openCredentials } from '../credentials/index.js';
-import { openModels } from './index.js';
+import { readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { afterEach, beforeEach, expect, it } from 'vitest';
+import { testApplication } from '../../../tests/installation.js';
+import { catalogSchema } from './contract.js';
 
-it('keeps explicit model settings across restart without changing providers', async () => {
-  const installation = await testInstallation();
-  const credentials = await openCredentials(installation.database, installation.keyPath);
-  try {
-    await credentials.initializeKey('a'.repeat(64));
-    const provider = fauxProvider({
-      provider: 'test',
-      models: [
-        {
-          id: 'test-model',
-        },
-      ],
-    }).provider;
-    const models = await openModels(
-      installation.database,
-      credentials.store,
-      installation.settings,
-      [
-        provider,
-      ],
-    );
-    await installation.settings.initialize((configuration) =>
-      models.validateConfiguration(configuration),
-    );
-    await models.saveDefaults({
-      provider: 'test',
-      modelId: 'test-model',
-      thinkingLevel: 'off',
-    });
-    const reopened = await openModels(
-      installation.database,
-      credentials.store,
-      installation.settings,
-      [
-        provider,
-      ],
-    );
-    expect((await reopened.catalog()).defaults).toEqual({
-      provider: 'test',
-      modelId: 'test-model',
-      thinkingLevel: 'off',
-    });
-    await expect(
-      models.saveDefaults({
-        provider: 'other',
-        modelId: 'test-model',
-        thinkingLevel: 'off',
-      }),
-    ).rejects.toThrow();
-  } finally {
-    await credentials.close();
-    await installation.dispose();
-  }
+let clef: Awaited<ReturnType<typeof testApplication>>;
+
+beforeEach(async () => {
+  clef = await testApplication();
+});
+
+afterEach(async () => {
+  await clef.dispose();
+});
+
+it('persists defaults in YAML and retains a reloaded selection across restart', async () => {
+  const path = join(clef.home, 'settings.yaml');
+  const source = await readFile(path, 'utf8');
+  expect(source).toContain('modelId: test-model');
+  expect(source).not.toContain('test-api-key');
+  await writeFile(path, source.replace('modelId: test-model', 'modelId: second-model'));
+  const catalog = catalogSchema.parse(
+    (
+      await clef.server.inject({
+        url: '/api/models',
+        headers: clef.headers,
+      })
+    ).json(),
+  );
+  expect(catalog.defaults?.modelId).toBe('second-model');
+
+  await clef.restart();
+  const restored = catalogSchema.parse(
+    (
+      await clef.server.inject({
+        url: '/api/models',
+        headers: clef.headers,
+      })
+    ).json(),
+  );
+  expect(restored.defaults).toEqual({
+    provider: 'openai',
+    modelId: 'second-model',
+    thinkingLevel: 'off',
+  });
+  expect(restored.providers).toContainEqual(
+    expect.objectContaining({
+      id: 'openai',
+      connected: true,
+    }),
+  );
+});
+
+it('rejects overlapping revisions and unavailable selections without overwriting defaults', async () => {
+  const catalog = catalogSchema.parse(
+    (
+      await clef.server.inject({
+        url: '/api/models',
+        headers: clef.headers,
+      })
+    ).json(),
+  );
+  const responses = await Promise.all(
+    Array.from(
+      {
+        length: 2,
+      },
+      () =>
+        clef.server.inject({
+          method: 'PUT',
+          url: '/api/models/default',
+          headers: clef.headers,
+          payload: {
+            ...catalog.defaults,
+            modelId: 'second-model',
+            revision: catalog.revision,
+          },
+        }),
+    ),
+  );
+  expect(responses.map((response) => response.statusCode).sort()).toEqual([
+    200,
+    409,
+  ]);
+  const saved = catalogSchema.parse(
+    (
+      await clef.server.inject({
+        url: '/api/models',
+        headers: clef.headers,
+      })
+    ).json(),
+  );
+  expect(saved.defaults?.modelId).toBe('second-model');
+  const unavailable = await clef.server.inject({
+    method: 'PUT',
+    url: '/api/models/default',
+    headers: clef.headers,
+    payload: {
+      ...saved.defaults,
+      provider: 'other',
+      revision: saved.revision,
+    },
+  });
+  expect(unavailable.statusCode).toBe(400);
+  expect(
+    (
+      await clef.server.inject({
+        url: '/api/models',
+        headers: clef.headers,
+      })
+    ).json(),
+  ).toEqual(saved);
 });

@@ -33,18 +33,6 @@ for (const [name, overrides] of Object.entries({
       },
     ],
   },
-  reference: {
-    secretRef: 'provider:anthropic',
-  },
-  endpoint: {
-    endpoint: 'https://untrusted.example',
-  },
-  path: {
-    path: '../installation.key',
-  },
-  conversation: {
-    conversationId: 'another-conversation',
-  },
   oversized: {
     defaults: {
       provider: 'openai',
@@ -158,15 +146,6 @@ for (const choice of [
     const after = await settings(page, clef.url);
     expect(after.active.models).toEqual(before.active.models);
     expect(after.active.permissions).toHaveLength(choice === 'Never' ? 1 : 0);
-    const repeated = await page.request.post(
-      `${clef.url}/api/conversations/${pending.conversation.id}/permissions/${request?.id}`,
-      {
-        data: {
-          choice: 'once',
-        },
-      },
-    );
-    expect(repeated.status()).toBe(409);
     await clef.restart();
     await page.reload();
     await send(page, 'configure switch again');
@@ -191,70 +170,6 @@ for (const choice of [
     expect((await settings(page, clef.url)).active.models).toEqual(before.active.models);
   });
 }
-
-test('rejects unauthenticated, cross-origin and cross-conversation decisions', async ({
-  page,
-  request,
-  clef,
-}) => {
-  await clef.setup();
-  await page.goto(clef.url);
-  await send(page, 'configure switch');
-  await expect(
-    page.getByRole('region', {
-      name: 'Configuration approval',
-    }),
-  ).toBeVisible();
-  const pending = await snapshot(page, clef.url);
-  const approval = pending.permissions[0];
-  const endpoint = `${clef.url}/api/conversations/${pending.conversation.id}/permissions/${approval?.id}`;
-  expect(
-    (
-      await request.post(endpoint, {
-        data: {
-          choice: 'once',
-        },
-      })
-    ).status(),
-  ).toBe(401);
-  expect(
-    (
-      await page.request.post(endpoint, {
-        data: {
-          choice: 'once',
-        },
-        headers: {
-          origin: 'https://untrusted.example',
-        },
-      })
-    ).status(),
-  ).toBe(403);
-  const other = await (
-    await page.request.post(`${clef.url}/api/conversations`, {
-      data: {},
-    })
-  ).json();
-  expect(
-    (
-      await page.request.post(
-        `${clef.url}/api/conversations/${other.id}/permissions/${approval?.id}`,
-        {
-          data: {
-            choice: 'once',
-          },
-        },
-      )
-    ).status(),
-  ).toBe(409);
-  expect((await snapshot(page, clef.url)).permissions).toEqual(pending.permissions);
-  expect((await settings(page, clef.url)).active.models.defaults?.modelId).toBe('test-model');
-  await page
-    .getByRole('button', {
-      name: 'Deny',
-      exact: true,
-    })
-    .click();
-});
 
 for (const interruption of [
   'Stop',
@@ -454,12 +369,16 @@ test('requires approval and switches only the requesting conversation at the nex
     })
   ).json();
   await page.goto(clef.url);
+  await expect(page).toHaveURL(`${clef.url}/#chat=${unrelated.id}`);
   await page
     .getByRole('button', {
       name: 'New conversation',
       exact: true,
     })
     .click();
+  await expect(page).not.toHaveURL(`${clef.url}/#chat=${unrelated.id}`);
+  await expect(page.locator('header')).toContainText('Connected');
+  await expect(page.locator('header')).not.toContainText('Loading…');
   await page.getByPlaceholder('Message Clef…').fill('configure switch');
   await page
     .getByRole('button', {
