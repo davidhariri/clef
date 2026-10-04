@@ -1,13 +1,12 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { once } from 'node:events';
 import { appendFile, mkdir, mkdtemp, readFile, realpath, rm, symlink } from 'node:fs/promises';
-import { type AddressInfo, createServer } from 'node:net';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { test as base, expect } from '@playwright/test';
 import { z } from 'zod';
+import { availablePort } from './network.js';
 
 export const execute = promisify(execFile);
 const artifactSchema = z.object({
@@ -19,17 +18,6 @@ const artifactSchema = z.object({
     }),
   ),
 });
-
-export async function availablePort(): Promise<number> {
-  const listener = createServer();
-  listener.listen(0, '127.0.0.1');
-  await once(listener, 'listening');
-  const port = (listener.address() as AddressInfo).port;
-  const closed = once(listener, 'close');
-  listener.close();
-  await closed;
-  return port;
-}
 
 async function stopLaunchAgent(target: string) {
   let output: string;

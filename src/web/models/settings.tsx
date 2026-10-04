@@ -70,6 +70,11 @@ export function ModelDefaults({ connections }: { connections: () => void }) {
         Manage connections
       </Button>
       {!catalog && !action.error && <p role="status">Loading model settings…</p>}
+      {catalog?.configurationError && (
+        <p role="alert" className="text-sm text-destructive">
+          {catalog.configurationError}
+        </p>
+      )}
       {catalog?.providers
         .filter((provider) => provider.error)
         .map((provider) => (
@@ -90,9 +95,13 @@ export function ModelDefaults({ connections }: { connections: () => void }) {
             setSaved(false);
             action.run(async () => {
               await request('/api/models/default', okSchema, {
-                body: selection,
+                body: {
+                  ...selection,
+                  revision: catalog?.revision,
+                },
                 method: 'PUT',
               });
+              setCatalog(await request('/api/models', catalogSchema));
               setSaved(true);
             });
           }}

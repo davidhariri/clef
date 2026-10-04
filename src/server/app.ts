@@ -10,6 +10,7 @@ import { openModels, registerModelRoutes } from './models/index.js';
 import { openPermissions } from './permissions/index.js';
 import { openInstallation } from './platform/database.js';
 import { createHttpServer } from './platform/http.js';
+import { registerSettingsRoutes, Settings } from './settings/index.js';
 
 export async function createApp(options: { home: string; providers?: readonly Provider[] }) {
   const installation = await openInstallation(options.home);
@@ -17,9 +18,16 @@ export async function createApp(options: { home: string; providers?: readonly Pr
   const accounts = await openAccounts(installation.database, (key) =>
     credentials.initializeKey(key),
   );
-  const models = await openModels(installation.database, credentials.store, options.providers);
-  const permissions = await openPermissions(installation.database);
-  const agent = await openAgent(installation.database, models.runtime);
+  const settings = new Settings(options.home);
+  const models = await openModels(
+    installation.database,
+    credentials.store,
+    settings,
+    options.providers,
+  );
+  await settings.initialize((configuration) => models.validateConfiguration(configuration));
+  const permissions = await openPermissions(installation.database, settings);
+  const agent = await openAgent(installation.database, models, settings, permissions);
 
   const server = await createHttpServer();
   const setupToken = randomBytes(32).toString('base64url');
@@ -27,6 +35,7 @@ export async function createApp(options: { home: string; providers?: readonly Pr
   registerAccountRoutes(server, accounts, credentials, models, setupToken);
   registerCredentialRoutes(server, credentials);
   registerModelRoutes(server, models);
+  registerSettingsRoutes(server, settings);
   registerMessageRoutes(server, agent, models, permissions);
 
   await server.register(staticFiles, {

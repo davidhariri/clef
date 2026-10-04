@@ -1,85 +1,9 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fauxAssistantMessage, fauxProvider, type Provider } from '@earendil-works/pi-ai';
 import { test as base, expect } from '@playwright/test';
 import { createApp } from '../src/server/app.js';
-
-function provider(): Provider {
-  const faux = fauxProvider({
-    provider: 'openai',
-    models: [
-      {
-        id: 'test-model',
-        name: 'Test model',
-      },
-      {
-        id: 'second-model',
-        name: 'Second model',
-      },
-    ],
-    tokensPerSecond: 100,
-  });
-  faux.setResponses(
-    Array.from(
-      {
-        length: 100,
-      },
-      () => (context) => {
-        const last = context.messages.filter((message) => message.role === 'user').at(-1);
-        const text = typeof last?.content === 'string' ? last.content : 'hello';
-        return fauxAssistantMessage(
-          text.includes('slow') ? 'A slow response. '.repeat(1000) : `Clef heard: ${text}`,
-        );
-      },
-    ),
-  );
-  return {
-    ...faux.provider,
-    auth: {
-      apiKey: {
-        name: 'Test key',
-        async resolve({ credential }) {
-          return credential?.key
-            ? {
-                auth: {
-                  apiKey: credential.key,
-                },
-              }
-            : undefined;
-        },
-      },
-      oauth: {
-        name: 'Test OAuth',
-        async login(interaction) {
-          interaction.notify({
-            type: 'auth_url',
-            url: 'https://example.com/test-login',
-          });
-          const answer = await interaction.prompt({
-            type: 'manual_code',
-            message: 'Paste the callback URL',
-          });
-          if (answer !== 'test-callback') throw new Error('Incorrect callback');
-          return {
-            type: 'oauth',
-            access: 'test-access',
-            refresh: 'test-refresh',
-            expires: Date.now() + 3600_000,
-          };
-        },
-        async refresh(value) {
-          return value;
-        },
-        async toAuth(value) {
-          return {
-            apiKey: value.access,
-          };
-        },
-      },
-    },
-  };
-}
+import { testProvider } from './provider.js';
 
 type ClefFixture = {
   url: string;
@@ -91,15 +15,29 @@ type ClefFixture = {
 
 export const test = base.extend<{
   clef: ClefFixture;
+  configurationOverrides: Record<string, unknown>;
+  modelName: string;
 }>({
-  clef: async ({ page }, use) => {
+  configurationOverrides: [
+    {},
+    {
+      option: true,
+    },
+  ],
+  modelName: [
+    'Test model',
+    {
+      option: true,
+    },
+  ],
+  clef: async ({ page, configurationOverrides, modelName }, use) => {
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
     const home = await mkdtemp(join(tmpdir(), 'clef-browser-'));
     let application = await createApp({
       home,
       providers: [
-        provider(),
+        testProvider(configurationOverrides, modelName),
       ],
     });
     let url = await application.server.listen({
@@ -137,7 +75,7 @@ export const test = base.extend<{
           application = await createApp({
             home,
             providers: [
-              provider(),
+              testProvider(configurationOverrides, modelName),
             ],
           });
           url = await application.server.listen({

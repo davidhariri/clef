@@ -31,10 +31,15 @@ function modelApi(request: APIRequestContext, url: string) {
           url: serverUrl,
         },
       }),
-    defaults: (selection: ModelSettings) =>
-      request.put(`${url}/api/models/default`, {
-        data: selection,
-      }),
+    defaults: async (selection: ModelSettings) => {
+      const catalog = catalogSchema.parse(await (await request.get(`${url}/api/models`)).json());
+      return request.put(`${url}/api/models/default`, {
+        data: {
+          ...selection,
+          revision: catalog.revision,
+        },
+      });
+    },
   };
 }
 
@@ -335,6 +340,11 @@ test('persists the Ollama endpoint and applies saved defaults to the next messag
   await clef.setup();
   expect((await models.connect(ollama.url)).ok()).toBe(true);
   expect((await models.catalog()).defaults?.provider).toBe('openai');
+  const settings = await (await page.request.get(`${clef.url}/api/settings`)).json();
+  expect(settings.active.models.connections).toContainEqual({
+    provider: 'ollama',
+    url: ollama.url,
+  });
   await page.goto(clef.url);
   await page
     .getByRole('button', {

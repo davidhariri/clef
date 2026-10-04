@@ -1,6 +1,9 @@
-import { createModels, fauxAssistantMessage, fauxProvider } from '@earendil-works/pi-ai';
+import { fauxAssistantMessage, fauxProvider } from '@earendil-works/pi-ai';
 import { expect, it, vi } from 'vitest';
 import { testInstallation } from '../../../tests/installation.js';
+import { openCredentials } from '../credentials/index.js';
+import { openModels } from '../models/index.js';
+import { openPermissions } from '../permissions/index.js';
 import { openAgent } from './index.js';
 
 it('keeps an active reply on its model and uses saved settings for the next input', async () => {
@@ -32,9 +35,15 @@ it('keeps an active reply on its model and uses saved settings for the next inpu
         }),
       ),
   ]);
-  const models = createModels();
-  models.setProvider(provider.provider);
-  const agent = await openAgent(installation.database, models);
+  const credentials = await openCredentials(installation.database, installation.keyPath);
+  const models = await openModels(installation.database, credentials.store, installation.settings, [
+    provider.provider,
+  ]);
+  await installation.settings.initialize((configuration) =>
+    models.validateConfiguration(configuration),
+  );
+  const permissions = await openPermissions(installation.database, installation.settings);
+  const agent = await openAgent(installation.database, models, installation.settings, permissions);
   const first = {
     provider: 'test',
     modelId: 'first',
@@ -70,6 +79,8 @@ it('keeps an active reply on its model and uses saved settings for the next inpu
     });
   } finally {
     await agent.close();
+    permissions.close();
+    await credentials.close();
     await installation.dispose();
   }
 });

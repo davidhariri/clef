@@ -1,4 +1,5 @@
 import { Settings } from '../settings/index.js';
+import { Approval } from './approval.js';
 import { Composer } from './composer.js';
 import { Transcript } from './transcript.js';
 import { useChat } from './use-chat.js';
@@ -20,6 +21,9 @@ export function Chat({ refresh }: { refresh: () => Promise<void> }) {
         </p>
       )}
       <Transcript snapshot={chat.snapshot} />
+      {chat.snapshot?.permissions.map((approval) => (
+        <Approval key={approval.id} approval={approval} />
+      ))}
       <Composer
         ready={chat.connected && Boolean(chat.snapshot)}
         generating={chat.snapshot?.busy ?? false}
