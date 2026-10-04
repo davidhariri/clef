@@ -1,11 +1,13 @@
+import type { APIRequestContext, Page } from '@playwright/test';
 import Fastify from 'fastify';
 import { z } from 'zod';
 import { test as base, expect } from '../../../tests/browser.js';
 import { snapshotSchema } from '../messages/contract.js';
-import { catalogSchema } from './contract.js';
+import { catalogSchema, type ModelSettings } from './contract.js';
 
 const test = base.extend<{
   ollama: Awaited<ReturnType<typeof startOllama>>;
+  models: ReturnType<typeof modelApi>;
 }>({
   ollama: async ({ page: _page }, use) => {
     const ollama = await startOllama();
@@ -15,7 +17,64 @@ const test = base.extend<{
       await ollama.close();
     }
   },
+  models: async ({ page, clef }, use) => {
+    await use(modelApi(page.request, clef.url));
+  },
 });
+
+function modelApi(request: APIRequestContext, url: string) {
+  return {
+    catalog: async () => catalogSchema.parse(await (await request.get(`${url}/api/models`)).json()),
+    connect: (serverUrl: string) =>
+      request.post(`${url}/api/models/ollama`, {
+        data: {
+          url: serverUrl,
+        },
+      }),
+    defaults: (selection: ModelSettings) =>
+      request.put(`${url}/api/models/default`, {
+        data: selection,
+      }),
+  };
+}
+
+async function choose(page: Page, field: string, option: string) {
+  await page
+    .getByRole('combobox', {
+      name: field,
+      exact: true,
+    })
+    .click();
+  await page
+    .getByRole('option', {
+      name: option,
+      exact: true,
+    })
+    .click();
+}
+
+async function openConnections(page: Page) {
+  await page
+    .getByRole('button', {
+      name: 'Settings',
+    })
+    .click();
+  await page
+    .getByText('Manage connections', {
+      exact: true,
+    })
+    .click();
+  await page
+    .getByText('Use local Ollama', {
+      exact: true,
+    })
+    .click();
+}
+
+async function send(page: Page, text: string) {
+  await page.getByPlaceholder('Message Clef…').fill(text);
+  await page.getByLabel('Send message').click();
+}
 
 async function startOllama() {
   const server = Fastify();
@@ -32,10 +91,10 @@ async function startOllama() {
     body: unknown;
     authorization: string | undefined;
   }[] = [];
-  server.addHook('onRequest', async (request) => {
+  server.addHook('preHandler', async (request) => {
     requests.push({
       path: request.url,
-      body: undefined,
+      body: request.body,
       authorization: request.headers.authorization,
     });
   });
@@ -54,7 +113,6 @@ async function startOllama() {
           'medium',
           'xhigh',
         ],
-        default: 'medium',
       },
     },
     {
@@ -62,24 +120,12 @@ async function startOllama() {
       capabilities: [
         'completion',
       ],
-      thinking: {
-        values: [
-          false,
-        ],
-        default: false,
-      },
     },
     {
       name: 'embed-test:small',
       capabilities: [
         'embedding',
       ],
-      thinking: {
-        values: [
-          false,
-        ],
-        default: false,
-      },
     },
   ];
   server.get('/api/tags', async (_request, reply) => {
@@ -91,6 +137,7 @@ async function startOllama() {
       return reply.code(responseControl.discoveryStatus).send({
         error: 'synthetic discovery failure',
       });
+
     return {
       models: [
         ...models.map(({ name }) => ({
@@ -111,15 +158,14 @@ async function startOllama() {
     if (remoteModels.includes(model))
       return {
         remote_model: 'remote-model',
-        remote_host: 'https://ollama.com',
         capabilities: [
           'completion',
           'thinking',
         ],
       };
-    const found = models.find(({ name }) => name === model);
+
     return {
-      ...found,
+      ...models.find(({ name }) => name === model),
       model_info: {
         'general.architecture': 'test',
         'test.context_length': 8192,
@@ -127,14 +173,11 @@ async function startOllama() {
     };
   });
   server.post('/v1/chat/completions', async (request, reply) => {
-    const body = z
+    const { model } = z
       .object({
         model: z.string(),
       })
-      .passthrough()
       .parse(request.body);
-    const last = requests.at(-1);
-    if (last) last.body = body;
     if (responseControl.inferenceError)
       return reply.code(404).send({
         error: {
@@ -142,6 +185,7 @@ async function startOllama() {
           type: 'not_found',
         },
       });
+
     reply.hijack();
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -152,7 +196,7 @@ async function startOllama() {
           id: 'synthetic-chat',
           object: 'chat.completion.chunk',
           created: 1,
-          model: body.model,
+          model,
           choices: [
             {
               index: 0,
@@ -177,6 +221,7 @@ async function startOllama() {
     port: 0,
     host: '127.0.0.1',
   });
+
   return {
     url,
     requests,
@@ -194,6 +239,7 @@ test('connects Ollama in web setup without a key and streams through the selecte
   page,
   clef,
   ollama,
+  models,
 }) => {
   await page.goto(clef.setupUrl);
   await page.getByLabel('Username').fill('synthetic-user');
@@ -225,9 +271,8 @@ test('connects Ollama in web setup without a key and streams through the selecte
     })
     .click();
   await expect(page.getByPlaceholder('Message Clef…')).toBeVisible();
-  const catalog = catalogSchema.parse(
-    await (await page.request.get(`${clef.url}/api/models`)).json(),
-  );
+
+  const catalog = await models.catalog();
   expect(catalog.defaults).toEqual({
     provider: 'ollama',
     modelId: 'qwen-test:small',
@@ -254,43 +299,22 @@ test('connects Ollama in web setup without a key and streams through the selecte
       ],
     },
   ]);
+
   ollama.responseControl.pause = true;
-  await page.getByPlaceholder('Message Clef…').fill('Say hello.');
-  await page
-    .getByRole('button', {
-      name: 'Send message',
-    })
-    .click();
-  await expect(
-    page
-      .getByRole('article', {
-        name: 'Clef reply',
-      })
-      .getByRole('paragraph'),
-  ).toHaveText('Hello');
-  await expect(
-    page.getByRole('button', {
-      name: 'Stop reply',
-    }),
-  ).toBeVisible();
+  await send(page, 'Say hello.');
+  const reply = page.getByLabel('Clef reply');
+  await expect(reply.getByRole('paragraph')).toHaveText('Hello');
+  await expect(page.getByLabel('Stop reply')).toBeVisible();
   ollama.responseControl.release();
-  await expect(
-    page.getByRole('article', {
-      name: 'Clef reply',
-    }),
-  ).toContainText('Hello from local Ollama.');
-  await expect(
-    page.getByRole('button', {
-      name: 'Stop reply',
-    }),
-  ).toHaveCount(0);
-  expect(ollama.requests.find(({ path }) => path === '/v1/chat/completions')?.authorization).toBe(
-    'Bearer ollama',
-  );
-  expect(ollama.requests.find(({ path }) => path === '/v1/chat/completions')?.body).toMatchObject({
-    model: 'qwen-test:small',
-    stream: true,
-    reasoning_effort: 'medium',
+  await expect(reply).toContainText('Hello from local Ollama.');
+  await expect(page.getByLabel('Stop reply')).toHaveCount(0);
+  expect(ollama.requests.find(({ path }) => path === '/v1/chat/completions')).toMatchObject({
+    authorization: 'Bearer ollama',
+    body: {
+      model: 'qwen-test:small',
+      stream: true,
+      reasoning_effort: 'medium',
+    },
   });
   expect(
     ollama.requests
@@ -303,39 +327,20 @@ test('persists the Ollama endpoint and chosen defaults without changing existing
   page,
   clef,
   ollama,
+  models,
 }) => {
   await clef.setup();
-  const connection = await page.request.post(`${clef.url}/api/models/ollama`, {
-    data: {
-      url: ollama.url,
-    },
-  });
-  expect(connection.ok()).toBe(true);
-  const catalog = catalogSchema.parse(
-    await (await page.request.get(`${clef.url}/api/models`)).json(),
-  );
-  expect(catalog.defaults?.provider).toBe('openai');
+  expect((await models.connect(ollama.url)).ok()).toBe(true);
+  expect((await models.catalog()).defaults?.provider).toBe('openai');
   await page.goto(clef.url);
   await page
     .getByRole('button', {
       name: 'Settings',
     })
     .click();
+  await choose(page, 'Provider', 'Ollama');
   await page
-    .getByRole('combobox', {
-      name: 'Provider',
-      exact: true,
-    })
-    .click();
-  await page
-    .getByRole('option', {
-      name: 'Ollama',
-      exact: true,
-    })
-    .click();
-  await page
-    .getByRole('combobox', {
-      name: 'Thinking',
+    .getByLabel('Thinking', {
       exact: true,
     })
     .click();
@@ -372,28 +377,16 @@ test('persists the Ollama endpoint and chosen defaults without changing existing
       exact: true,
     }),
   ).toBeVisible();
-  const conversations = await (await page.request.get(`${clef.url}/api/conversations`)).json();
-  const originalId = conversations[0].id;
+  const originalId = new URLSearchParams(new URL(page.url()).hash.slice(1)).get('chat');
+
   await page
     .getByRole('button', {
       name: 'Settings',
     })
     .click();
+  await choose(page, 'Model', 'plain-test:small');
   await page
-    .getByRole('combobox', {
-      name: 'Model',
-      exact: true,
-    })
-    .click();
-  await page
-    .getByRole('option', {
-      name: 'plain-test:small',
-      exact: true,
-    })
-    .click();
-  await page
-    .getByRole('combobox', {
-      name: 'Thinking',
+    .getByLabel('Thinking', {
       exact: true,
     })
     .click();
@@ -413,9 +406,8 @@ test('persists the Ollama endpoint and chosen defaults without changing existing
     .click();
   await clef.restart();
   await page.reload();
-  const restored = catalogSchema.parse(
-    await (await page.request.get(`${clef.url}/api/models`)).json(),
-  );
+
+  const restored = await models.catalog();
   expect(restored.providers.find(({ id }) => id === 'ollama')).toMatchObject({
     connected: true,
     url: ollama.url,
@@ -434,17 +426,8 @@ test('persists the Ollama endpoint and chosen defaults without changing existing
     modelId: 'qwen-test:small',
     thinkingLevel: 'xhigh',
   });
-  await page.getByPlaceholder('Message Clef…').fill('Say hello after restart.');
-  await page
-    .getByRole('button', {
-      name: 'Send message',
-    })
-    .click();
-  await expect(
-    page.getByRole('article', {
-      name: 'Clef reply',
-    }),
-  ).toContainText('Hello from local Ollama.');
+  await send(page, 'Say hello after restart.');
+  await expect(page.getByLabel('Clef reply')).toContainText('Hello from local Ollama.');
   expect(
     ollama.requests.filter(({ path }) => path === '/v1/chat/completions').at(-1)?.body,
   ).toMatchObject({
@@ -462,21 +445,7 @@ test('persists the Ollama endpoint and chosen defaults without changing existing
       exact: true,
     }),
   ).toBeVisible();
-  await page
-    .getByRole('button', {
-      name: 'Settings',
-    })
-    .click();
-  await page
-    .getByText('Manage connections', {
-      exact: true,
-    })
-    .click();
-  await page
-    .getByText('Use local Ollama', {
-      exact: true,
-    })
-    .click();
+  await openConnections(page);
   await expect(page.getByLabel('Ollama server URL')).toHaveValue(ollama.url);
 });
 
@@ -484,29 +453,16 @@ test('keeps the selected provider and explains an Ollama outage across restart',
   page,
   clef,
   ollama,
+  models,
 }) => {
   await clef.setup();
-  expect(
-    (
-      await page.request.post(`${clef.url}/api/models/ollama`, {
-        data: {
-          url: ollama.url,
-        },
-      })
-    ).ok(),
-  ).toBe(true);
-  const selection = {
+  expect((await models.connect(ollama.url)).ok()).toBe(true);
+  const selection: ModelSettings = {
     provider: 'ollama',
     modelId: 'qwen-test:small',
     thinkingLevel: 'off',
   };
-  expect(
-    (
-      await page.request.put(`${clef.url}/api/models/default`, {
-        data: selection,
-      })
-    ).ok(),
-  ).toBe(true);
+  expect((await models.defaults(selection)).ok()).toBe(true);
   await page.goto(clef.url);
   await expect(page.getByPlaceholder('Message Clef…')).toBeVisible();
   await ollama.close();
@@ -518,9 +474,8 @@ test('keeps the selected provider and explains an Ollama outage across restart',
     })
     .click();
   await expect(page.getByRole('alert')).toContainText('Cannot reach Ollama');
-  const catalog = catalogSchema.parse(
-    await (await page.request.get(`${clef.url}/api/models`)).json(),
-  );
+
+  const catalog = await models.catalog();
   expect(catalog.defaults).toEqual(selection);
   expect(catalog.providers.find(({ id }) => id === 'ollama')).toMatchObject({
     connected: true,
@@ -550,20 +505,11 @@ test('rejects invalid settings and key entry without changing a working connecti
   page,
   clef,
   ollama,
+  models,
 }) => {
   await clef.setup();
-  expect(
-    (
-      await page.request.post(`${clef.url}/api/models/ollama`, {
-        data: {
-          url: ollama.url,
-        },
-      })
-    ).ok(),
-  ).toBe(true);
-  const before = catalogSchema.parse(
-    await (await page.request.get(`${clef.url}/api/models`)).json(),
-  );
+  expect((await models.connect(ollama.url)).ok()).toBe(true);
+  const before = await models.catalog();
   const key = await page.request.post(`${clef.url}/api/models/key`, {
     data: {
       provider: 'ollama',
@@ -577,21 +523,17 @@ test('rejects invalid settings and key entry without changing a working connecti
   for (const url of [
     'file:///tmp/ollama',
     `${ollama.url}/v1`,
-    `http://name:secret@127.0.0.1:11434`,
+    'http://name:secret@127.0.0.1:11434',
     `${ollama.url}?secret=value`,
     `${ollama.url}#fragment`,
   ]) {
-    const response = await page.request.post(`${clef.url}/api/models/ollama`, {
-      data: {
-        url,
-      },
-    });
+    const response = await models.connect(url);
     expect(response.status()).toBe(400);
     expect(await response.json()).toEqual({
       error: 'Use the Ollama server URL without credentials, a path, a query, or a fragment.',
     });
   }
-  for (const selection of [
+  const invalid: ModelSettings[] = [
     {
       provider: 'ollama',
       modelId: 'missing',
@@ -607,40 +549,28 @@ test('rejects invalid settings and key entry without changing a working connecti
       modelId: 'qwen-test:small',
       thinkingLevel: 'high',
     },
-  ]) {
-    const response = await page.request.put(`${clef.url}/api/models/default`, {
-      data: selection,
-    });
+  ];
+  for (const selection of invalid) {
+    const response = await models.defaults(selection);
     expect(response.status()).toBe(400);
     expect(await response.json()).toEqual({
       error: 'Choose an available model and thinking level.',
     });
   }
-  expect(
-    catalogSchema.parse(await (await page.request.get(`${clef.url}/api/models`)).json()),
-  ).toEqual(before);
+  expect(await models.catalog()).toEqual(before);
   await clef.restart();
-  expect(
-    catalogSchema.parse(await (await page.request.get(`${clef.url}/api/models`)).json()),
-  ).toEqual(before);
+  expect(await models.catalog()).toEqual(before);
 });
 
 test('discovers only installed local chat models, not cloud aliases', async ({
-  page,
   clef,
   ollama,
+  models,
 }) => {
   await clef.setup();
   ollama.remoteModels.push('cloud-alias');
-  const response = await page.request.post(`${clef.url}/api/models/ollama`, {
-    data: {
-      url: ollama.url,
-    },
-  });
-  expect(response.ok()).toBe(true);
-  const catalog = catalogSchema.parse(
-    await (await page.request.get(`${clef.url}/api/models`)).json(),
-  );
+  expect((await models.connect(ollama.url)).ok()).toBe(true);
+  const catalog = await models.catalog();
   expect(
     catalog.models.filter(({ provider }) => provider === 'ollama').map(({ id }) => id),
   ).toEqual([
@@ -650,9 +580,9 @@ test('discovers only installed local chat models, not cloud aliases', async ({
 });
 
 test('explains empty and invalid discovery without saving a failed connection', async ({
-  page,
   clef,
   ollama,
+  models,
 }) => {
   await clef.setup();
   ollama.models.splice(0);
@@ -661,11 +591,7 @@ test('explains empty and invalid discovery without saving a failed connection', 
     503,
   ]) {
     ollama.responseControl.discoveryStatus = status;
-    const response = await page.request.post(`${clef.url}/api/models/ollama`, {
-      data: {
-        url: ollama.url,
-      },
-    });
+    const response = await models.connect(ollama.url);
     expect(response.status()).toBe(status === 200 ? 400 : 502);
     expect(await response.json()).toEqual({
       error:
@@ -675,19 +601,13 @@ test('explains empty and invalid discovery without saving a failed connection', 
     });
   }
   ollama.responseControl.invalidDiscovery = true;
-  const invalid = await page.request.post(`${clef.url}/api/models/ollama`, {
-    data: {
-      url: ollama.url,
-    },
-  });
+  const invalid = await models.connect(ollama.url);
   expect(invalid.status()).toBe(502);
   expect(await invalid.json()).toEqual({
     error: 'Ollama returned an invalid model list.',
   });
   await clef.restart();
-  const catalog = catalogSchema.parse(
-    await (await page.request.get(`${clef.url}/api/models`)).json(),
-  );
+  const catalog = await models.catalog();
   expect(catalog.defaults?.provider).toBe('openai');
   expect(catalog.providers.find(({ id }) => id === 'ollama')).toEqual({
     id: 'ollama',
@@ -701,59 +621,30 @@ test('reports model inference failure without switching to a connected cloud pro
   page,
   clef,
   ollama,
+  models,
 }) => {
   await clef.setup();
-  expect(
-    (
-      await page.request.post(`${clef.url}/api/models/ollama`, {
-        data: {
-          url: ollama.url,
-        },
-      })
-    ).ok(),
-  ).toBe(true);
-  const selection = {
+  expect((await models.connect(ollama.url)).ok()).toBe(true);
+  const selection: ModelSettings = {
     provider: 'ollama',
     modelId: 'qwen-test:small',
     thinkingLevel: 'off',
   };
-  expect(
-    (
-      await page.request.put(`${clef.url}/api/models/default`, {
-        data: selection,
-      })
-    ).ok(),
-  ).toBe(true);
+  expect((await models.defaults(selection)).ok()).toBe(true);
   ollama.responseControl.inferenceError = true;
   await page.goto(clef.url);
-  await page.getByPlaceholder('Message Clef…').fill('Say hello.');
-  await page
-    .getByRole('button', {
-      name: 'Send message',
-    })
-    .click();
-  await expect(
-    page.getByRole('article', {
-      name: 'Clef reply',
-    }),
-  ).toContainText(
+  await send(page, 'Say hello.');
+  await expect(page.getByLabel('Clef reply')).toContainText(
     'The model request failed. Check your connection, model access, and provider settings.',
   );
-  await expect(
-    page.getByRole('button', {
-      name: 'Stop reply',
-    }),
-  ).toHaveCount(0);
+  await expect(page.getByLabel('Stop reply')).toHaveCount(0);
   expect(
     ollama.requests.filter(({ path }) => path === '/v1/chat/completions').at(-1)?.body,
   ).toMatchObject({
     model: 'qwen-test:small',
     reasoning_effort: 'none',
   });
-  const catalog = catalogSchema.parse(
-    await (await page.request.get(`${clef.url}/api/models`)).json(),
-  );
-  expect(catalog.defaults).toEqual(selection);
+  expect((await models.catalog()).defaults).toEqual(selection);
   const id = new URLSearchParams(new URL(page.url()).hash.slice(1)).get('chat');
   const snapshot = snapshotSchema.parse(
     await (await page.request.get(`${clef.url}/api/conversations/${id}`)).json(),
@@ -767,29 +658,16 @@ test('keeps missing model defaults explicit after refreshing the installed model
   page,
   clef,
   ollama,
+  models,
 }) => {
   await clef.setup();
-  expect(
-    (
-      await page.request.post(`${clef.url}/api/models/ollama`, {
-        data: {
-          url: ollama.url,
-        },
-      })
-    ).ok(),
-  ).toBe(true);
-  const selection = {
+  expect((await models.connect(ollama.url)).ok()).toBe(true);
+  const selection: ModelSettings = {
     provider: 'ollama',
     modelId: 'qwen-test:small',
     thinkingLevel: 'medium',
   };
-  expect(
-    (
-      await page.request.put(`${clef.url}/api/models/default`, {
-        data: selection,
-      })
-    ).ok(),
-  ).toBe(true);
+  expect((await models.defaults(selection)).ok()).toBe(true);
   await page.goto(clef.url);
   await expect(
     page.getByText('qwen-test:small', {
@@ -797,15 +675,7 @@ test('keeps missing model defaults explicit after refreshing the installed model
     }),
   ).toBeVisible();
   ollama.models.splice(0, 1);
-  expect(
-    (
-      await page.request.post(`${clef.url}/api/models/ollama`, {
-        data: {
-          url: ollama.url,
-        },
-      })
-    ).ok(),
-  ).toBe(true);
+  expect((await models.connect(ollama.url)).ok()).toBe(true);
   await page
     .getByRole('button', {
       name: 'Settings',
@@ -819,36 +689,24 @@ test('keeps missing model defaults explicit after refreshing the installed model
       name: 'Save defaults',
     }),
   ).toBeDisabled();
-  const catalog = catalogSchema.parse(
-    await (await page.request.get(`${clef.url}/api/models`)).json(),
-  );
-  expect(catalog.defaults).toEqual(selection);
+  expect((await models.catalog()).defaults).toEqual(selection);
 });
 
 test('offers off and medium for boolean thinking and sends the enabled setting', async ({
   page,
   clef,
   ollama,
+  models,
 }) => {
   await clef.setup();
   const model = ollama.models[0];
-  if (!model) throw new Error('Missing synthetic model.');
+  if (!model?.thinking) throw new Error('Missing synthetic thinking model.');
   model.thinking.values = [
     false,
     true,
   ];
-  expect(
-    (
-      await page.request.post(`${clef.url}/api/models/ollama`, {
-        data: {
-          url: ollama.url,
-        },
-      })
-    ).ok(),
-  ).toBe(true);
-  const catalog = catalogSchema.parse(
-    await (await page.request.get(`${clef.url}/api/models`)).json(),
-  );
+  expect((await models.connect(ollama.url)).ok()).toBe(true);
+  const catalog = await models.catalog();
   expect(
     catalog.models.find(({ provider, id }) => provider === 'ollama' && id === 'qwen-test:small')
       ?.thinkingLevels,
@@ -856,29 +714,15 @@ test('offers off and medium for boolean thinking and sends the enabled setting',
     'off',
     'medium',
   ]);
-  expect(
-    (
-      await page.request.put(`${clef.url}/api/models/default`, {
-        data: {
-          provider: 'ollama',
-          modelId: 'qwen-test:small',
-          thinkingLevel: 'medium',
-        },
-      })
-    ).ok(),
-  ).toBe(true);
+  const selection: ModelSettings = {
+    provider: 'ollama',
+    modelId: 'qwen-test:small',
+    thinkingLevel: 'medium',
+  };
+  expect((await models.defaults(selection)).ok()).toBe(true);
   await page.goto(clef.url);
-  await page.getByPlaceholder('Message Clef…').fill('Say hello with thinking enabled.');
-  await page
-    .getByRole('button', {
-      name: 'Send message',
-    })
-    .click();
-  await expect(
-    page.getByRole('article', {
-      name: 'Clef reply',
-    }),
-  ).toContainText('Hello from local Ollama.');
+  await send(page, 'Say hello with thinking enabled.');
+  await expect(page.getByLabel('Clef reply')).toContainText('Hello from local Ollama.');
   expect(ollama.requests.find(({ path }) => path === '/v1/chat/completions')?.body).toMatchObject({
     reasoning_effort: 'medium',
   });
