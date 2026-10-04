@@ -1,69 +1,55 @@
 # Clef
 
-An excellent personal AI assistant that runs on computers you control.
+> [!WARNING]
+> Clef is still early in its development. Some things may be broken or too permissive. Ye been warned!
 
-We’re building a capable assistant with simple desktop and mobile apps, without giving up control of your data. Run it on your own machine or a server in your cloud account.
+Clef is a general-purpose AI assistant that runs on computers you control. It's fast, fun and puts ownership of your agent enitrely in your hands.
 
-## What we’re building
+## Installation
 
-- A TypeScript server with a web app for chat, setup, and management.
-- Open-source desktop and mobile apps for working with your assistant.
-- Support for local and cloud models, chosen by you.
-- A small agent core that you can extend with new capabilities.
-
-This repo focuses on the server and web app.
-
-## Installation paths
-
-The server will support two installation paths:
-
-1. **Container:** Run a Linux container with Docker. Use Docker on Linux, OrbStack on macOS, or a Linux cloud VM such as a DigitalOcean Droplet.
-2. **Direct:** Run the server on Linux or macOS without a container.
-
-Direct installation can expose local files and software to agent tools. It puts more of your computer and data at risk. Containers also need careful limits on mounted files and credentials.
-
-There is no direct Windows installation path.
-
-## Run locally
-
-Use Node 24 LTS on Linux or macOS.
+Use Node.js 24 LTS or newer
 
 ```sh
-npm ci
-npm run build
-npm start
+npm install -g @davidhariri/clef@latest --ignore-scripts
+clef
 ```
 
-Open the link printed by the server. Clef listens only on `127.0.0.1:3737`.
+Open the setup link printed in your terminal. Create your account, save your recovery key, and connect a model provider. The package includes the built server and web app; installation does not need scripts or a source checkout.
 
-- `CLEF_HOME` changes the data directory. The default is `~/.local/share/clef`.
-- `CLEF_PORT` changes the local port.
-- Run one server per data directory. Stop it before making a filesystem backup.
+Clef runs in the foreground. Keep the terminal open, or press `Ctrl+C` to stop it. This release listens only on `127.0.0.1:3737` and does not install a background service.
 
-## Setup
+- Data stays in `~/.local/share/clef`, outside the npm package. Set `CLEF_HOME` to use another directory.
+- Set `CLEF_PORT` to use another local port. Run only one server per data directory.
+- To update, stop Clef, repeat the install command, then run `clef` again. Your data stays in place.
 
-On first start, the server prints a protected link to web setup:
 
-1. Set your username, password, and encryption key. You can generate the key and copy it once. Save a recovery copy.
-2. Connect a model provider through sign-in or an API key.
+## Why Clef over Meta's Muse, XAI's Grokbot, or OpenAI's Dot?
 
-The server unlocks stored secrets automatically after restarts. Your account password and encryption key are separate.
+These are great products. Useful AI personal assistants are effectively operating systems for their users. Maybe i'm just old now, but I feel uneasy about giving over so much of my information to systems I can't control or easily leave should I want to.
 
-Review the default provider, model, and thinking level at **Settings > Models > Default** before your first message. Use **Manage connections** to add or replace provider credentials.
+1. **Control** - Your data is stored and used in an environment you fully control.
+2. **Privacy** - You choose your inference provider. A cloud provider receives the context sent to it. Local inference support is planned.
+3. **Portability** - You can change models and providers. Your data stays on storage you control. Agent-assisted migration is planned.
 
-## Architecture
+## Why use Clef over OpenClaw, Nanoclaw or Hermes?
 
-The TypeScript server manages conversations, model calls, and tools. The web app connects through the Clef API. Planned desktop and mobile apps will use the same API. See the [system diagram](ARCHITECTURE.md).
+Those projects are awesome. So awesome that they are overwhelming! At least to me. I am aiming to build something that feels as approachable as the frontier labs products but without all the perverse incentives.
 
-Clef uses Pi Durable for agent work. Pi Codemode is selected for restricted JavaScript execution; execution must stay disabled until all resource limits are enforced. Scripts will call permission-checked tools, without direct access to the host shell. Work will stay in-process where possible. Future VM workers will handle delegated tasks that need a browser, computer control, or a separate OS isolation boundary.
+## Features
 
-Clef will store messages, traces, analytics events, encrypted secrets, and other runtime state in local SQLite. Non-secret configuration will use files with references to the shared secret store. Skills, projects, notes, and other files will live in a folder or volume you control.
+- **Local setup** - Install it on a macOS or Linux computer you control. Docker packaging and remote access are planned.
+- **Self-extension (planned)** - Clef will be able to write extensions and small scripts. Code execution is disabled until resource limits are enforced.
+- **Self-configuration (planned)** - Clef will be able to change its configuration. For now, use the web settings to change models and provider connections.
 
-Self-hosting does not hide data from a cloud model you choose to use. Clef must make that data flow clear and never silently switch from local to cloud inference.
+## License
 
-The server is organized by feature. Each feature keeps its API, behavior, storage, and tests together behind a small public interface. See [Server modules](ARCHITECTURE.md#server-modules) for ownership and dependency rules.
+Clef-owned code uses [MIT](LICENSE). Third-party components retain their own licenses.
 
-## Contributing
+## More
+
+Nerd? read [ARCHITECTURE](ARCHITECTURE.md)
+
+## Contributing (are you an AI agent?)
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md). Use Biome for formatting and linting. Follow the [check policy](CONTRIBUTING.md#check-a-change) for code and documentation changes.
 

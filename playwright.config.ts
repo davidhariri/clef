@@ -1,8 +1,17 @@
 import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
-  testDir: './src',
   testMatch: '**/*.e2e.spec.ts',
+  projects: [
+    {
+      name: 'app',
+      testDir: './src',
+    },
+    {
+      name: 'package',
+      testDir: './tests',
+    },
+  ],
   forbidOnly: true,
   workers: 1,
   retries: 0,
