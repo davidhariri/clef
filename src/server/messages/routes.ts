@@ -23,12 +23,14 @@ export function registerMessageRoutes(
     };
   });
   app.post('/api/conversation/messages', async (request) => {
-    const { text, requestId } = sendInputSchema.parse(request.body);
+    const input = sendInputSchema.parse(request.body);
     const model = await models.defaults();
     await agent.open(model);
     try {
-      await agent.send(text, requestId, model);
-    } catch {
+      await agent.send(input, model);
+    } catch (error) {
+      if (error instanceof HttpError) throw error;
+
       throw new HttpError(
         409,
         'The conversation is busy or unavailable. Wait or stop the current reply.',

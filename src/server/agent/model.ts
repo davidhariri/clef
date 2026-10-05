@@ -1,6 +1,10 @@
 import type { Message } from '@earendil-works/pi-ai';
 import type { AgentState, ConversationView, LiveState } from '@earendil-works/pi-durable';
-import type { ChatMessage, ConversationSnapshot } from '../messages/contract.js';
+import {
+  type ChatMessage,
+  type ConversationSnapshot,
+  uiResultSchema,
+} from '../messages/contract.js';
 
 function displayMessage(message: Message, id: string, pending = false): ChatMessage | undefined {
   if (message.role !== 'user' && message.role !== 'assistant' && message.role !== 'toolResult')
@@ -21,6 +25,14 @@ function displayMessage(message: Message, id: string, pending = false): ChatMess
       : text,
     error,
     pending,
+    ...(message.role === 'toolResult' && message.toolName === 'present_ui' && !message.isError
+      ? {
+          ui: {
+            ...uiResultSchema.parse(message.details),
+            submitted: false,
+          },
+        }
+      : {}),
   };
 }
 
@@ -32,7 +44,7 @@ export function projectConversation(view: ConversationView): ConversationSnapsho
   for (const entry of view.entries) {
     for (const [index, message] of (entry.model ?? []).entries()) {
       const item = displayMessage(message, `${entry.id}:${index}`);
-      if (item) messages.push(item);
+      if (item && (item.text || item.ui)) messages.push(item);
     }
   }
   if (live?.generation?.message) {
