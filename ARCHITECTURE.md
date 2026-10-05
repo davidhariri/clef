@@ -208,6 +208,16 @@ Keep skills, active projects, second-brain notes, and other files in a file work
 
 The database, configuration files, and file workspace must persist when the container is replaced. Backups must include all three. Use a SQLite-safe backup method; do not copy only the main database file while it is active.
 
+### Planned file access
+
+File access is planned, not enabled. Settings will list allowed directories and their access level: read only or read and write. The initial list will contain only the persistent workspace, with read and write access. The agent can request access to another directory. An authenticated user must approve the directory and access level before the tools can use it.
+
+Read and write access permits file creation and updates. Deletion always requires separate user approval for the exact pending action, including inside the workspace. A saved directory grant does not approve deletion. Do not offer a saved approval that permits future deletions. Moves are not available.
+
+A dangerous global read-and-write setting will be off by default. Only the user can enable it through Settings with explicit confirmation. It applies to the filesystem visible to the server, subject to OS permissions. In a container or VM, this includes exposed mounts, not all files on the physical computer. Global access does not remove the protections for Clef secrets and permission controls. Broad write access can change executable or startup files; restricted script execution does not make that access safe.
+
+Clef-owned file tools must enforce the same path permissions and resource limits for direct agent calls and calls from Pi Codemode. Check each operation, not only the script that requests it. Scripts cannot change their own grants. Define directory-rule precedence and race-resistant path handling before enabling the tools.
+
 ### Configuration files and live activation
 
 `settings.yaml` in the installation directory is the source of truth for model defaults, provider references, the Ollama server URL, and saved permission rules. Settings owns the file operations. Models and permissions own their schemas and rules. The server removes the obsolete SQLite configuration without importing it. Accounts, credentials, conversations, and the installation identifier remain in SQLite.
