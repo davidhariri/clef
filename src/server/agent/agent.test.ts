@@ -32,6 +32,7 @@ it('streams one saved reply, deduplicates input, and restores the conversation a
         'settings_change',
         'files_access',
         'files',
+        'present_ui',
       ]);
       return fauxAssistantMessage('Hello from the test model.');
     },
@@ -59,8 +60,20 @@ it('streams one saved reply, deduplicates input, and restores the conversation a
   try {
     await agent.open(settings);
     const id = crypto.randomUUID();
-    await agent.send('Hello', id, settings);
-    await agent.send('Hello', id, settings);
+    await agent.send(
+      {
+        text: 'Hello',
+        requestId: id,
+      },
+      settings,
+    );
+    await agent.send(
+      {
+        text: 'Hello',
+        requestId: id,
+      },
+      settings,
+    );
     await vi.waitFor(async () => expect((await agent.snapshot()).busy).toBe(false));
     expect((await agent.snapshot()).messages.map((message) => message.text)).toEqual([
       'Hello',

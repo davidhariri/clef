@@ -159,6 +159,20 @@ Conversation commands use HTTP JSON at `/api/conversation`. SSE sends validated 
 
 The browser renders Markdown without raw HTML and does not automatically fetch model-supplied external images. These controls reduce specific risks; they are not a complete security guarantee.
 
+### Model-composed interfaces
+
+The `present_ui` tool lets the model compose inline cards, layouts, text, tables, inputs, choices, checkboxes, and buttons. The model chooses their labels, options, and meaning. The renderer has no settings-specific controls or rules. `@json-render/react` renders the validated spec with Clef's existing controls. It does not execute model-written HTML, JavaScript, or CSS.
+
+Messages owns the browser-safe UI contract. Agent owns the presentation tool, validation, and durable projection. Web messages owns rendering and submission. Pi Durable stores the spec in the tool result and the submitted answers in a user message. There is no separate UI database or agent loop.
+
+A spec has at most 64 elements, eight tree levels, 32 flat state fields, and a conservative 32 KiB size limit. References must form one tree. Input bindings must refer to initialized state with the correct value type. Only the named `submit` action is allowed. It cannot navigate, call a tool, or approve an action. Clef rejects invalid specs and returns the error to the model for correction.
+
+Buttons send a model-defined intent and the field values through the existing `/api/conversation/messages` operation. The model receives a structured `ui_submission` user message and interprets it. Answers must match the form's field names and value types; their domain meaning is for the model and subsequent tools to check. The encoded input is limited to 16 KiB. Unknown cards and submissions during active work are rejected. Each card accepts one answer. Identical retries are idempotent; changed retries are rejected. Submitted answers persist across reconnects and restarts.
+
+A successful presentation ends the reply when it is the only tool in the round. Inputs remain disabled while the agent is busy or disconnected. Unsubmitted edits stay in the browser and are lost on reload. Submitted cards show the saved values and become read-only, including in other open tabs. The model can present another card when more input is needed.
+
+A form answer is not approval to change settings or access an external service. The existing tool validation and permission flow remain authoritative. Generated interfaces show a notice that answers return to the model and must not contain secrets. Full specs render after validation; partial UI streaming is not enabled.
+
 ## Code execution and permissions
 
 Use `@earendil-works/pi-codemode` for model-written JavaScript. It runs QuickJS compiled to WebAssembly in a worker thread. This is a language sandbox, not an OS VM. The worker thread keeps script execution off the server's main event loop; the restricted runtime and checked host calls enforce access limits.
@@ -178,7 +192,7 @@ Store persistent permission rules in configuration files. Let the user inspect a
 
 Check network destinations and redirects before sending requests. Do not treat approval of an MCP server URL as approval of every tool it provides. Clef can restrict which MCP calls it sends, but it cannot enforce its local sandbox rules inside an independent MCP server.
 
-The registry contains four trusted tools: `settings_inspect`, `settings_change`, `files_access`, and `files`. Configuration and file bounds are defined below. Keep scripts, shell tools, network tools, and imported extensions disabled until their required bounds are available and tested. Set explicit limits for script time, memory, output, and host-call work. Apply output limits before host buffering, not only after an execution returns. Permission waits must also expire. Stopping a script must cancel pending approvals and signal active tools to stop. Cancellation does not undo completed external actions. Do not blindly replay an interrupted script that may have caused side effects.
+The registry contains the trusted tools `settings_inspect`, `settings_change`, `files_access`, and `files`, plus the bounded [`present_ui` tool](#model-composed-interfaces). Configuration and file bounds are defined below. Keep scripts, shell tools, network tools, and imported extensions disabled until their required bounds are available and tested. Set explicit limits for script time, memory, output, and host-call work. Apply output limits before host buffering, not only after an execution returns. Permission waits must also expire. Stopping a script must cancel pending approvals and signal active tools to stop. Cancellation does not undo completed external actions. Do not blindly replay an interrupted script that may have caused side effects.
 
 ### Future VM workers
 

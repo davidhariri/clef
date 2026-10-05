@@ -1,7 +1,7 @@
 import { CopyIcon } from 'lucide-react';
 import { useState } from 'react';
 import { defaultRehypePlugins } from 'streamdown';
-import type { ConversationSnapshot } from '../../server/messages/contract.js';
+import type { ConversationSnapshot, UiSubmission } from '../../server/messages/contract.js';
 import {
   Message,
   MessageAction,
@@ -11,6 +11,7 @@ import {
   type MessageResponseProps,
 } from '../components/upstream/ai-elements/message.js';
 import { useAction } from '../platform/action.js';
+import { Presentation } from './presentation.js';
 
 const rehypePlugins = Object.entries(defaultRehypePlugins)
   .filter(([name]) => name !== 'raw')
@@ -32,9 +33,13 @@ const markdownComponents: NonNullable<MessageResponseProps['components']> = {
 export function Response({
   message,
   streaming,
+  ready,
+  submit,
 }: {
   message: ConversationSnapshot['messages'][number];
   streaming: boolean;
+  ready: boolean;
+  submit: (input: UiSubmission) => Promise<void>;
 }) {
   const action = useAction();
   const [copied, setCopied] = useState(false);
@@ -46,14 +51,24 @@ export function Response({
           <span className="text-xs font-medium text-muted-foreground">
             {message.role === 'user' ? 'You' : 'Clef'}
           </span>
-          <MessageResponse
-            components={markdownComponents}
-            skipHtml
-            rehypePlugins={rehypePlugins}
-            isAnimating={streaming}
-          >
-            {message.text}
-          </MessageResponse>
+          {message.ui ? (
+            <Presentation
+              key={message.ui.submitted ? 'submitted' : 'open'}
+              messageId={message.id}
+              ui={message.ui}
+              ready={ready}
+              submit={submit}
+            />
+          ) : (
+            <MessageResponse
+              components={markdownComponents}
+              skipHtml
+              rehypePlugins={rehypePlugins}
+              isAnimating={streaming}
+            >
+              {message.text}
+            </MessageResponse>
+          )}
         </MessageContent>
         {message.role === 'assistant' && (
           <MessageActions>

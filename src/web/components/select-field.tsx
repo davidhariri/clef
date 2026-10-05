@@ -13,6 +13,7 @@ export function SelectField({
   value,
   options,
   onChange,
+  disabled = false,
 }: {
   label: string;
   value: string;
@@ -21,13 +22,14 @@ export function SelectField({
     label: string;
   }[];
   onChange: (value: string) => void;
+  disabled?: boolean;
 }) {
   const id = useId();
 
   return (
     <div className="grid gap-2">
       <Label htmlFor={id}>{label}</Label>
-      <Select value={value} onValueChange={onChange}>
+      <Select value={value} onValueChange={onChange} disabled={disabled}>
         <SelectTrigger id={id} className="w-full">
           <SelectValue />
         </SelectTrigger>

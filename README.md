@@ -59,6 +59,7 @@ Choose a model and thinking level in **Settings > Default model**. Changed defau
 ## Features
 
 - **Local setup** - Install it on a macOS or Linux computer you control. Docker packaging and remote access are planned.
+- **Inline interfaces** - Ask Clef to show information as a card or collect answers in a form. The model chooses the layout and interprets your answers. Do not enter secrets. See [interface limits](ARCHITECTURE.md#model-composed-interfaces).
 - **Self-extension (planned)** - Clef will be able to write extensions and small scripts. Code execution is disabled until resource limits are enforced.
 - **Self-configuration** - Clef can inspect model settings and request a model-default change. Approve changes in web chat, with an optional switch of that conversation. Connect providers through web settings. See [configuration limits](ARCHITECTURE.md#configuration-files-and-live-activation).
 

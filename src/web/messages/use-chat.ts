@@ -2,7 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
 import { request } from '../../client/api.js';
 import { okSchema } from '../../server/accounts/contract.js';
-import { type ConversationSnapshot, snapshotSchema } from '../../server/messages/contract.js';
+import {
+  type ConversationSnapshot,
+  snapshotSchema,
+  type UiSubmission,
+} from '../../server/messages/contract.js';
 import { permissionRequestSchema } from '../../server/permissions/contract.js';
 
 export function useChat() {
@@ -69,6 +73,17 @@ export function useChat() {
     pending.current = undefined;
   }
 
+  async function submit(input: UiSubmission) {
+    if (!snapshot || !connected || snapshot.busy)
+      throw new Error('Wait for the conversation to be ready.');
+
+    await request('/api/conversation/messages', okSchema, {
+      body: {
+        ui: input,
+      },
+    });
+  }
+
   async function stop() {
     await request('/api/conversation/stop', okSchema, {
       body: {},
@@ -78,6 +93,7 @@ export function useChat() {
   return {
     connected,
     send,
+    submit,
     stop,
     snapshot,
     error,

@@ -20,7 +20,7 @@ export function Chat({ refresh }: { refresh: () => Promise<void> }) {
           {chat.error}
         </p>
       )}
-      <Transcript snapshot={chat.snapshot} />
+      <Transcript snapshot={chat.snapshot} ready={chat.connected} submit={chat.submit} />
       {chat.snapshot?.permissions.map((approval) => (
         <Approval key={approval.id} approval={approval} />
       ))}

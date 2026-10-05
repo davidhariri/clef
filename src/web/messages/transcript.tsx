@@ -1,4 +1,4 @@
-import type { ConversationSnapshot } from '../../server/messages/contract.js';
+import type { ConversationSnapshot, UiSubmission } from '../../server/messages/contract.js';
 import {
   Conversation,
   ConversationContent,
@@ -8,7 +8,15 @@ import {
 import { Spinner } from '../components/upstream/shadcn-ui/components/ui/spinner.js';
 import { Response } from './response.js';
 
-export function Transcript({ snapshot }: { snapshot: ConversationSnapshot | undefined }) {
+export function Transcript({
+  snapshot,
+  ready,
+  submit,
+}: {
+  snapshot: ConversationSnapshot | undefined;
+  ready: boolean;
+  submit: (input: UiSubmission) => Promise<void>;
+}) {
   return (
     <Conversation aria-label="Conversation" className="min-h-0">
       <ConversationContent className="mx-auto w-full max-w-3xl">
@@ -21,6 +29,8 @@ export function Transcript({ snapshot }: { snapshot: ConversationSnapshot | unde
           <Response
             key={message.id}
             message={message}
+            ready={ready && !snapshot.busy}
+            submit={submit}
             streaming={
               snapshot.busy &&
               index === snapshot.messages.length - 1 &&
