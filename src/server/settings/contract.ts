@@ -1,11 +1,12 @@
 import { z } from 'zod';
 import { modelConfigurationSchema } from '../models/contract.js';
-import { permissionRulesSchema } from '../permissions/contract.js';
+import { fileAccessSchema, permissionRulesSchema } from '../permissions/contract.js';
 
 export const settingsSchema = z.strictObject({
   version: z.literal(1),
   models: modelConfigurationSchema,
   permissions: permissionRulesSchema,
+  files: fileAccessSchema,
 });
 
 export type SettingsDocument = z.infer<typeof settingsSchema>;

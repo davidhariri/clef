@@ -1,10 +1,12 @@
 import { BACKGROUND_CONTEXT } from '@earendil-works/chord/context';
 import { createRegistry, Harness } from '@earendil-works/pi-durable';
+import type { Files } from '../files/index.js';
 import type { Models } from '../models/index.js';
 import type { Permissions } from '../permissions/index.js';
 import type { Database } from '../platform/database.js';
 import type { Settings } from '../settings/index.js';
 import { configurationTools } from './configuration.js';
+import { fileTools } from './files.js';
 import { AgentRepository } from './repository.js';
 import { Agent } from './service.js';
 
@@ -15,9 +17,11 @@ export async function openAgent(
   models: Models,
   settings: Settings,
   permissions: Permissions,
+  files: Files,
 ): Promise<Agent> {
   const registry = createRegistry();
   registry.install(configurationTools(settings, models, permissions));
+  registry.install(fileTools(files));
   const repository = await AgentRepository.open(database);
   const harness = await Harness.open(
     repository.storage,

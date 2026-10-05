@@ -6,6 +6,7 @@ import {
   fsyncSync,
   openSync,
   readSync,
+  realpathSync,
   renameSync,
   rmSync,
   writeFileSync,
@@ -46,6 +47,7 @@ export class Settings {
             connections: [],
           },
           permissions: [],
+          files: this.initialFileAccess(),
         }),
         {
           flag: 'wx',
@@ -55,7 +57,49 @@ export class Settings {
     } catch (error) {
       if (!(error instanceof Error && 'code' in error && error.code === 'EEXIST')) throw error;
     }
+    await this.initializeFileAccess();
     await this.view();
+  }
+
+  private initialFileAccess() {
+    return {
+      global: false,
+      directories: [
+        {
+          path: realpathSync.native(join(dirname(this.path), 'workspace')),
+          access: 'read-write',
+        },
+      ],
+    };
+  }
+
+  private async initializeFileAccess(): Promise<void> {
+    const source = this.read();
+    const parsed = parseDocument(source, {
+      prettyErrors: false,
+      uniqueKeys: true,
+    });
+    if (parsed.errors.length || parsed.warnings.length) return;
+    let value: unknown;
+    try {
+      value = parsed.toJS({
+        maxAliasCount: 0,
+      });
+    } catch {
+      return;
+    }
+    const previous = settingsSchema
+      .omit({
+        files: true,
+      })
+      .safeParse(value);
+    if (!previous.success) return;
+    const next = stringify({
+      ...previous.data,
+      files: this.initialFileAccess(),
+    });
+    await this.validate(next);
+    this.replace(next, revision(source));
   }
 
   private read(): string {

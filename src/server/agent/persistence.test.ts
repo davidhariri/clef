@@ -5,6 +5,7 @@ import { SqliteStorage } from '@earendil-works/pi-durable/storage/sqlite';
 import { expect, it } from 'vitest';
 import { testInstallation } from '../../../tests/installation.js';
 import { openCredentials } from '../credentials/index.js';
+import { openFiles } from '../files/index.js';
 import { openModels } from '../models/index.js';
 import { openPermissions } from '../permissions/index.js';
 import { openInstallation } from '../platform/database.js';
@@ -67,6 +68,7 @@ it('opens the most recent stored chat and keeps older chat records intact', asyn
     configuredModels,
     installation.settings,
     permissions,
+    openFiles(installation.home, installation.workspacePath, permissions),
   );
   try {
     expect((await agent.open(settings)).id).toBe(String(latest.id));
