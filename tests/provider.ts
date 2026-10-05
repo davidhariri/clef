@@ -43,6 +43,22 @@ function configurationResponse(
   });
 }
 
+function fileResponse(context: TranscriptContext, text: string) {
+  const result = context.messages.at(-1);
+  if (result?.role === 'toolResult' && result.toolName === 'files') {
+    const content = result.content
+      .filter((part) => part.type === 'text')
+      .map((part) => part.text)
+      .join('');
+    return fauxAssistantMessage(
+      result.isError ? 'File action rejected.' : `File action completed. ${content}`,
+    );
+  }
+  return fauxAssistantMessage(fauxToolCall('files', JSON.parse(text.slice(5))), {
+    stopReason: 'toolUse',
+  });
+}
+
 export function testProvider(
   overrides: Record<string, unknown> = {},
   modelName = 'Test model',
@@ -69,6 +85,7 @@ export function testProvider(
       () => (context, _options, _state, model) => {
         const last = context.messages.filter((message) => message.role === 'user').at(-1);
         const text = typeof last?.content === 'string' ? last.content : 'hello';
+        if (text.startsWith('file ')) return fileResponse(context, text);
         if (text.startsWith('configure '))
           return configurationResponse(context, text, model, overrides);
         return fauxAssistantMessage(

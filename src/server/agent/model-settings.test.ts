@@ -2,6 +2,7 @@ import { fauxAssistantMessage, fauxProvider } from '@earendil-works/pi-ai';
 import { expect, it, vi } from 'vitest';
 import { testInstallation } from '../../../tests/installation.js';
 import { openCredentials } from '../credentials/index.js';
+import { openFiles } from '../files/index.js';
 import { openModels } from '../models/index.js';
 import { openPermissions } from '../permissions/index.js';
 import { openAgent } from './index.js';
@@ -43,7 +44,14 @@ it('keeps an active reply on its model and uses saved settings for the next inpu
     models.validateConfiguration(configuration),
   );
   const permissions = await openPermissions(installation.database, installation.settings);
-  const agent = await openAgent(installation.database, models, installation.settings, permissions);
+  const files = openFiles(installation.home, installation.workspacePath, permissions);
+  const agent = await openAgent(
+    installation.database,
+    models,
+    installation.settings,
+    permissions,
+    files,
+  );
   const first = {
     provider: 'test',
     modelId: 'first',

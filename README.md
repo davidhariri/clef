@@ -34,9 +34,17 @@ Those projects are awesome. So awesome that they are overwhelming! At least to m
 
 ## Settings
 
-Open **Settings** from chat. Use the grouped navigation to select **Default model**, **Connections**, **Tools**, or **Account**. Save changes without closing the dialog. Use Close or Escape to return to chat.
+Open **Settings** from chat. Use the grouped navigation to select **Default model**, **Connections**, **File access**, **Tools**, or **Account**. Save changes without closing the dialog. Use Close or Escape to return to chat.
 
 Under **Connections**, select a provider to view its status and connection form. OpenAI offers ChatGPT sign-in and API-key entry. These methods share one OpenAI connection; connecting either method replaces the current one. ChatGPT subscription access and OpenAI API billing are separate.
+
+### File access
+
+Open **Settings > File access** to add a server directory with **Read only** or **Read and write** access. Changes save immediately. Use **No access** to block a directory, or **Remove rule** to remove its rule. Removing a rule can expose a broader parent or global grant. Use **Refresh access** after a concurrent settings change.
+
+Only the workspace is granted initially. Ask Clef to read or write a file elsewhere to request access in chat. Check the directory and access level before approving. Every file deletion needs its own approval. Moves and directory deletion are unavailable.
+
+**Enable global access** is off by default and requires confirmation. It exposes files visible to the server, including container or VM mounts. It can let Clef overwrite personal files and startup programs. Files read can be sent to your selected model provider. See [file protections and limits](ARCHITECTURE.md#file-access).
 
 ## Local models with Ollama
 

@@ -2,6 +2,7 @@ import { fauxAssistantMessage, fauxProvider } from '@earendil-works/pi-ai';
 import { expect, it, vi } from 'vitest';
 import { testInstallation } from '../../../tests/installation.js';
 import { openCredentials } from '../credentials/index.js';
+import { openFiles } from '../files/index.js';
 import { openModels } from '../models/index.js';
 import { openPermissions } from '../permissions/index.js';
 import { openInstallation } from '../platform/database.js';
@@ -29,6 +30,8 @@ it('streams one saved reply, deduplicates input, and restores the conversation a
       ).toEqual([
         'settings_inspect',
         'settings_change',
+        'files_access',
+        'files',
       ]);
       return fauxAssistantMessage('Hello from the test model.');
     },
@@ -40,7 +43,14 @@ it('streams one saved reply, deduplicates input, and restores the conversation a
     models.validateConfiguration(configuration),
   );
   const permissions = await openPermissions(installation.database, installation.settings);
-  const agent = await openAgent(installation.database, models, installation.settings, permissions);
+  const files = openFiles(installation.home, installation.workspacePath, permissions);
+  const agent = await openAgent(
+    installation.database,
+    models,
+    installation.settings,
+    permissions,
+    files,
+  );
   const settings = {
     provider: 'test',
     modelId: 'test-model',
@@ -58,7 +68,13 @@ it('streams one saved reply, deduplicates input, and restores the conversation a
     ]);
     await agent.close();
     const reopened = await openInstallation(installation.home);
-    const restored = await openAgent(reopened.database, models, installation.settings, permissions);
+    const restored = await openAgent(
+      reopened.database,
+      models,
+      installation.settings,
+      permissions,
+      files,
+    );
     try {
       expect((await restored.snapshot()).messages).toHaveLength(2);
     } finally {

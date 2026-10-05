@@ -10,6 +10,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '../components/upstream/shadcn-ui/components/ui/dialog.js';
+import { FileAccessSettings } from '../files/index.js';
 import { Connections, ModelDefaults } from '../models/index.js';
 
 const groups = [
@@ -23,6 +24,7 @@ const groups = [
   {
     label: 'System',
     sections: [
+      'File access',
       'Tools',
     ],
   },
@@ -94,6 +96,7 @@ export function Settings({ refresh }: { refresh: () => Promise<void> }) {
               <ModelDefaults connections={() => setSection('Connections')} />
             )}
             {section === 'Connections' && <Connections refresh={refresh} />}
+            {section === 'File access' && <FileAccessSettings />}
             {section === 'Tools' && (
               <div className="grid gap-4">
                 <h2 className="text-xl font-semibold">Tools</h2>

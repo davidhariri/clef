@@ -1,12 +1,50 @@
 import type { Database } from '../platform/database.js';
 import type { Settings } from '../settings/index.js';
-import { type PermissionRule, permissionScopeKey } from './contract.js';
+import {
+  type DirectoryRule,
+  type FileAccess,
+  type PermissionRule,
+  permissionScopeKey,
+} from './contract.js';
+
+import { resolveDirectoryRule } from './files.js';
 
 export class PermissionRepository {
   constructor(private readonly settings: Settings) {}
 
   static async removeObsoleteTable(database: Database): Promise<void> {
     await database.exec('DROP TABLE IF EXISTS clef_permissions');
+  }
+
+  async fileAccess() {
+    const view = await this.settings.view();
+    return {
+      revision: view.revision,
+      policy: view.active.files,
+      error: view.error,
+    };
+  }
+
+  async saveFileRule(rule: DirectoryRule, revision: string, signal: AbortSignal): Promise<string> {
+    const saved = await this.settings.update(
+      revision,
+      (document) => {
+        const resolved = resolveDirectoryRule(rule);
+        document.files.directories = document.files.directories.filter((item) => {
+          const existing = resolveDirectoryRule(item);
+          return (existing.identity ?? existing.path) !== (resolved.identity ?? resolved.path);
+        });
+        document.files.directories.push(rule);
+      },
+      signal,
+    );
+    return saved.revision;
+  }
+
+  async saveFileAccess(policy: FileAccess, revision: string): Promise<void> {
+    await this.settings.update(revision, (document) => {
+      document.files = policy;
+    });
   }
 
   async view() {
