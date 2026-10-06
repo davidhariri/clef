@@ -196,7 +196,7 @@ The registry contains the trusted tools `settings_inspect`, `settings_change`, `
 
 ### Planned script limits
 
-The agent feature owns Codemode integration. Reuse Pi Codemode's runtime and limits, not a second sandbox. These are implementation decisions; scripts remain disabled until enforcement and tests are complete.
+The agent feature owns Codemode integration. Reuse Pi Codemode's runtime and limits, not a second sandbox. These are implementation decisions; scripts remain disabled until enforcement and tests are complete. Wait for upstream Pi Codemode support for bounded bridge messages, return values, and host-call work. Do not maintain a local runtime patch.
 
 | Resource | Limit | Source |
 | --- | --- | --- |
