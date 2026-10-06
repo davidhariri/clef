@@ -47,7 +47,11 @@ it('streams one saved reply, deduplicates input, and restores the conversation a
     thinkingLevel: 'off',
   } as const;
   try {
-    await agent.open(settings);
+    const [created, opened] = await Promise.all([
+      agent.createMain(settings),
+      agent.open(settings),
+    ]);
+    expect(opened.id).toBe(created.id);
     const id = crypto.randomUUID();
     await agent.send('Hello', id, settings);
     await agent.send('Hello', id, settings);

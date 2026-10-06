@@ -13,13 +13,14 @@ async function inspectFixture(files: Record<string, string>) {
   try {
     const fixture = {
       'tsconfig.json': '{"compilerOptions":{"module":"NodeNext","moduleResolution":"NodeNext"}}',
-      'src/server/accounts/service.ts': 'export const account = 1;',
-      'src/server/accounts/index.ts': 'export { account } from "./service.js";',
-      'src/server/accounts/contract.ts': 'export type Account = { name: string };',
+      'src/server/access/service.ts': 'export const access = 1;',
+      'src/server/access/index.ts': 'export { access } from "./service.js";',
+      'src/server/access/contract.ts': 'export type Client = { name: string };',
       'src/server/messages/index.ts': 'export const message = 1;',
-      'src/web/models/settings.ts': 'export const settings = 1;',
-      'src/web/models/index.ts': 'export { settings } from "./settings.js";',
-      'src/web/messages/index.ts': 'export const chat = 1;',
+      'src/tui/settings/settings.ts': 'export const settings = 1;',
+      'src/tui/settings/index.ts': 'export { settings } from "./settings.js";',
+      'src/tui/messages/index.ts': 'export const chat = 1;',
+      'src/client/index.ts': 'export const client = 1;',
       ...files,
     };
     for (const [path, content] of Object.entries(fixture)) {
@@ -92,63 +93,75 @@ it.each([
     'sqlite-driver-has-one-owner',
   ],
   [
-    'private web implementation',
-    'src/web/messages/index.ts',
-    'export { settings } from "../models/settings.js";',
-    'web-models-private-implementation',
+    'private terminal implementation',
+    'src/tui/messages/index.ts',
+    'export { settings } from "../settings/settings.js";',
+    'tui-settings-private-implementation',
   ],
   [
     'feature-aware shared UI',
-    'src/web/components/button.ts',
-    'export { settings } from "../models/index.js";',
-    'web-components-have-no-app-dependencies',
+    'src/tui/components/button.ts',
+    'export { settings } from "../settings/index.js";',
+    'tui-components-have-no-app-dependencies',
   ],
   [
-    'feature-aware web platform',
-    'src/web/platform/events.ts',
-    'export { settings } from "../models/index.js";',
-    'web-platform-has-no-features',
+    'feature-aware terminal platform',
+    'src/tui/platform/events.ts',
+    'export { settings } from "../settings/index.js";',
+    'tui-platform-has-no-features',
   ],
   [
     'private implementation',
     'src/server/messages/index.ts',
-    'export { account } from "../accounts/service.js";',
-    'accounts-private-implementation',
+    'export { access } from "../access/service.js";',
+    'access-private-implementation',
   ],
   [
     'private types',
     'src/server/messages/index.ts',
-    'export type { Account } from "../accounts/model.js";',
-    'accounts-private-implementation',
+    'export type { Client } from "../access/model.js";',
+    'access-private-implementation',
   ],
   [
     'client server imports',
-    'src/web/app.ts',
-    'export { account } from "../server/accounts/index.js";',
+    'src/tui/app.ts',
+    'export { access } from "../server/access/index.js";',
+    'clients-only-import-contracts',
+  ],
+  [
+    'transport server imports',
+    'src/client/index.ts',
+    'export { access } from "../server/access/index.js";',
     'clients-only-import-contracts',
   ],
   [
     'unsafe contracts',
-    'src/server/accounts/contract.ts',
-    'export { account } from "./service.js";',
-    'contracts-are-browser-safe',
+    'src/server/access/contract.ts',
+    'export { access } from "./service.js";',
+    'contracts-are-client-safe',
   ],
   [
     'Node in contracts',
-    'src/server/accounts/contract.ts',
+    'src/server/access/contract.ts',
     'export { readFile } from "node:fs/promises";',
     'contracts-have-no-node-runtime',
   ],
   [
     'feature-aware platform',
     'src/server/platform/database.ts',
-    'export { account } from "../accounts/index.js";',
+    'export { access } from "../access/index.js";',
     'platform-has-no-features',
+  ],
+  [
+    'server client coupling',
+    'src/server/access/index.ts',
+    'export { client } from "../../client/index.js";',
+    'server-has-no-clients',
   ],
   [
     'circular modules',
     'src/server/messages/index.ts',
-    'export { account } from "../accounts/index.js";',
+    'export { access } from "../access/index.js";',
     'no-cycles',
   ],
 ])('rejects %s', async (name, path, source, rule) => {
@@ -156,10 +169,10 @@ it.each([
     [path]: source,
   };
   if (name === 'private types')
-    files['src/server/accounts/model.ts'] = 'export type Account = { name: string };';
+    files['src/server/access/model.ts'] = 'export type Client = { name: string };';
   if (name === 'circular modules')
-    files['src/server/accounts/service.ts'] =
-      'export { message as account } from "../messages/index.js";';
+    files['src/server/access/service.ts'] =
+      'export { message as access } from "../messages/index.js";';
   const result = await inspectFixture(files);
   expect(result.status).toBe(1);
   expect(result.output).toContain(rule);
@@ -173,26 +186,32 @@ it('allows native service commands only from the lifecycle supervisor', async ()
   expect(result.status).toBe(0);
 });
 
-it('allows public feature interfaces and browser-safe contracts', async () => {
+it('allows public feature interfaces and client-safe contracts', async () => {
   const result = await inspectFixture({
-    'src/server/messages/index.ts': 'export { account } from "../accounts/index.js";',
-    'src/web/app.ts': 'export type { Account } from "../server/accounts/contract.js";',
+    'src/server/messages/index.ts': 'export { access } from "../access/index.js";',
+    'src/tui/app.ts': 'export type { Client } from "../server/access/contract.js";',
   });
   expect(result.status).toBe(0);
 });
 
-it('keeps the web app as the only executable client', async () => {
+it('keeps the terminal as the only executable client', async () => {
   expect((await readdir('src')).sort()).toEqual([
     'client',
+    'main.ts',
     'server',
-    'web',
+    'tui',
   ]);
-  expect(await readdir('src/client')).toEqual([
-    'api.ts',
+  const manifest = JSON.parse(await readFile('package.json', 'utf8'));
+  expect(manifest.bin).toEqual({
+    clef: 'lib/main.js',
+  });
+  expect(manifest.files).toEqual([
+    'INSTALLATION.md',
+    'lib/',
   ]);
 });
 
-it('keeps server code inside feature folders and exposes a public interface for each feature', async () => {
+it('keeps server code in feature folders with public interfaces', async () => {
   const entries = await readdir('src/server', {
     withFileTypes: true,
   });
@@ -220,36 +239,23 @@ it('keeps server code inside feature folders and exposes a public interface for 
   }
 });
 
-it('keeps web features behind public entry points', async () => {
-  const entries = await readdir('src/web', {
+it('keeps terminal features behind public entry points', async () => {
+  const entries = await readdir('src/tui', {
     withFileTypes: true,
   });
-
   for (const entry of entries) {
-    if (entry.isFile() && !entry.name.endsWith('.e2e.spec.ts'))
-      expect([
-        'main.tsx',
-        'index.html',
-        'globals.css',
-        'theme.css',
-      ]).toContain(entry.name);
     if (
       entry.isDirectory() &&
       ![
         'components',
         'platform',
       ].includes(entry.name)
-    ) {
-      const files = await readdir(join('src/web', entry.name));
-      expect(
-        files.some((file) => file === 'index.ts' || file === 'index.tsx'),
-        entry.name,
-      ).toBe(true);
-    }
+    )
+      expect(await readdir(join('src/tui', entry.name))).toContain('index.ts');
   }
 });
 
-it('does not contain suppression directives or Clef-owned code comments', async () => {
+it('does not contain suppression directives or code comments', async () => {
   const paths = (
     await readdir('src', {
       recursive: true,
@@ -259,8 +265,6 @@ it('does not contain suppression directives or Clef-owned code comments', async 
   for (const path of paths) {
     const content = await readFile(join('src', path), 'utf8');
     expect(content, path).not.toMatch(/biome-ignore|eslint-disable|@ts-ignore|@ts-nocheck/);
-    if (path.startsWith('web/components/upstream/')) continue;
-
     const source = ts.createSourceFile(path, content, ts.ScriptTarget.Latest, true);
     function inspect(node: ts.Node): void {
       const ranges = [

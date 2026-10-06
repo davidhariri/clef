@@ -60,6 +60,18 @@ export function registerModelRoutes(app: FastifyInstance, models: Models): void 
         .parse(request.params).id,
     ),
   );
+  app.delete('/api/models/login/:id', async (request) => {
+    const { id } = z
+      .object({
+        id: z.string(),
+      })
+      .parse(request.params);
+    models.login.state(id);
+    await models.login.close();
+    return {
+      ok: true,
+    };
+  });
   app.post('/api/models/login/:id', async (request) => {
     const { id } = z
       .object({

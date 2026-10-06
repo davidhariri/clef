@@ -1,28 +1,21 @@
-#!/usr/bin/env node
-import { fileURLToPath } from 'node:url';
 import { createApp } from './app.js';
-import { runCli } from './lifecycle/index.js';
 
-try {
-  await runCli(fileURLToPath(import.meta.url), async (home, port) => {
-    const application = await createApp({
-      home,
-    });
-    try {
-      const url = await application.server.listen({
-        port,
-        host: '127.0.0.1',
-      });
-      return {
-        url: () => application.entryUrl(url),
-        close: () => application.server.close(),
-      };
-    } catch (error) {
-      await application.server.close();
-      throw error;
-    }
+export async function startServer(home: string, port: number) {
+  const application = await createApp({
+    home,
   });
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
+  try {
+    const url = await application.server.listen({
+      port,
+      host: '127.0.0.1',
+    });
+    return {
+      url,
+      token: application.localToken,
+      close: () => application.server.close(),
+    };
+  } catch (error) {
+    await application.server.close();
+    throw error;
+  }
 }

@@ -14,11 +14,20 @@ export const messageSchema = z.object({
   pending: z.boolean(),
 });
 export type ChatMessage = z.infer<typeof messageSchema>;
-const conversationSchema = z.object({
+export const conversationSchema = z.object({
   id: z.string(),
   model: modelSettingsSchema,
 });
 export type ConversationInfo = z.infer<typeof conversationSchema>;
+export const conversationSummarySchema = z.object({
+  id: z.string(),
+  title: z.string().max(120),
+  main: z.boolean(),
+});
+export type ConversationSummary = z.infer<typeof conversationSummarySchema>;
+export const historySchema = z.object({
+  conversations: conversationSummarySchema.array().max(50),
+});
 export const snapshotSchema = z.object({
   conversation: conversationSchema,
   messages: z.array(messageSchema),

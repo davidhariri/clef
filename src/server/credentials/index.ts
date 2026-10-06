@@ -6,7 +6,7 @@ export { registerCredentialRoutes } from './routes.js';
 
 export type Credentials = Pick<
   CredentialService,
-  'store' | 'locked' | 'initializeKey' | 'recover' | 'close'
+  'store' | 'locked' | 'initializeKey' | 'provision' | 'recover' | 'close'
 >;
 
 export async function openCredentials(database: Database, keyPath: string): Promise<Credentials> {

@@ -6,6 +6,6 @@
     "outDir": "lib",
     "types": ["node"]
   },
-  "include": ["src/server/**/*.ts"],
+  "include": ["src/**/*.ts"],
   "exclude": ["src/**/*.test.ts", "src/**/*.e2e.spec.ts"]
 }

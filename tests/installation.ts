@@ -7,7 +7,7 @@ import { openInstallation } from '../src/server/platform/database.js';
 import { Settings } from '../src/server/settings/index.js';
 import { testProvider } from './provider.js';
 
-export async function testApplication() {
+export async function testApplication(options: { connect?: boolean } = {}) {
   const home = await mkdtemp(join(tmpdir(), 'clef-api-'));
   let application = await createApp({
     home,
@@ -17,7 +17,7 @@ export async function testApplication() {
   });
   const headers = {
     host: '127.0.0.1:3737',
-    cookie: '',
+    authorization: `Bearer ${application.localToken}`,
   };
   const dispose = async () => {
     await application.server.close();
@@ -28,33 +28,18 @@ export async function testApplication() {
   };
 
   try {
-    const account = await application.server.inject({
-      method: 'POST',
-      url: '/api/setup',
-      headers: {
-        ...headers,
-        'x-clef-setup': application.setupToken,
-      },
-      payload: {
-        username: 'david',
-        password: 'a long test password',
-        key: 'a'.repeat(64),
-      },
-    });
-    assert.equal(account.statusCode, 200, account.body);
-    const session = account.cookies.find((cookie) => cookie.name === 'clef');
-    assert.ok(session);
-    headers.cookie = `clef=${session.value}`;
-    const connection = await application.server.inject({
-      method: 'POST',
-      url: '/api/models/key',
-      headers,
-      payload: {
-        provider: 'openai',
-        key: 'test-api-key',
-      },
-    });
-    assert.equal(connection.statusCode, 200, connection.body);
+    if (options.connect !== false) {
+      const connection = await application.server.inject({
+        method: 'POST',
+        url: '/api/models/key',
+        headers,
+        payload: {
+          provider: 'openai',
+          key: 'test-api-key',
+        },
+      });
+      assert.equal(connection.statusCode, 200, connection.body);
+    }
   } catch (error) {
     await dispose();
     throw error;
@@ -63,6 +48,9 @@ export async function testApplication() {
   return {
     home,
     headers,
+    get localToken() {
+      return application.localToken;
+    },
     get server() {
       return application.server;
     },

@@ -1,267 +1,78 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { expect, test } from '../../../tests/browser.js';
-
-test('completes provider sign-in without leaving settings', async ({ page, clef }) => {
-  await clef.setup();
-  await page.goto(clef.url);
-  await page
-    .getByRole('button', {
-      name: 'Settings',
-      exact: true,
-    })
-    .click();
-  const dialog = page.getByRole('dialog', {
-    name: 'Settings',
-  });
-  await dialog
-    .getByRole('button', {
-      name: 'Connections',
-      exact: true,
-    })
-    .click();
-  await dialog
-    .getByRole('button', {
-      name: 'OpenAI',
-      exact: true,
-    })
-    .click();
-  const signIn = dialog.getByRole('button', {
-    name: 'Sign in with ChatGPT',
-    exact: true,
-  });
-  await signIn.click();
-  await dialog.getByLabel('Sign-in response').fill('test-callback');
-  await dialog
-    .getByRole('button', {
-      name: 'Complete sign-in',
-      exact: true,
-    })
-    .click();
-  await expect(dialog.getByRole('status')).toHaveText('Connection saved.');
-  await expect(signIn).toBeEnabled();
-  await expect(dialog.getByLabel('Sign-in response')).toHaveCount(0);
-});
+import { expect, test } from '../../../tests/api.js';
+import type { ConversationSnapshot } from '../messages/contract.js';
 
 test('reloads settings without interrupting a pinned model stream or its SSE connection', async ({
-  page,
   clef,
 }) => {
-  await clef.setup();
-  await page.goto(clef.url);
-  await page.getByPlaceholder('Message Clef…').fill('Please send a slow response');
-  await page
-    .getByRole('button', {
-      name: 'Send message',
-    })
-    .click();
-  const reply = page
-    .getByRole('article', {
-      name: 'Clef reply',
-    })
-    .last();
-  await expect(reply).toContainText('A slow');
-  const path = join(clef.home, 'settings.yaml');
-  const source = await readFile(path, 'utf8');
-  await writeFile(path, source.replace('modelId: test-model', 'modelId: second-model'));
-  const catalog = await (await page.request.get(`${clef.url}/api/models`)).json();
-  expect(catalog.defaults.modelId).toBe('second-model');
-  const length = (await reply.innerText()).length;
-  await expect.poll(async () => (await reply.innerText()).length).toBeGreaterThan(length);
-  await expect(page.locator('header')).toContainText('test-model');
-  await expect(
-    page.getByText('Reconnecting…', {
-      exact: true,
-    }),
-  ).toHaveCount(0);
-  await page
-    .getByRole('button', {
-      name: 'Stop reply',
-    })
-    .click();
-  await expect(
-    page.getByRole('button', {
-      name: 'Stop reply',
-    }),
-  ).toHaveCount(0);
-  await page.getByPlaceholder('Message Clef…').fill('Use the saved model');
-  await page
-    .getByRole('button', {
-      name: 'Send message',
-    })
-    .click();
-  await expect(
-    page
-      .getByRole('article', {
-        name: 'Clef reply',
-      })
-      .last(),
-  ).toContainText('Clef heard: Use the saved model');
-  await expect(page.locator('header')).toContainText('second-model');
+  await clef.connect();
+  const client = clef.client;
+  const abort = new AbortController();
+  const updates: ConversationSnapshot[] = [];
+  let connections = 0;
+  const stream = client.watch(
+    abort.signal,
+    (view) => updates.push(view),
+    (error) => {
+      if (!error) connections++;
+    },
+  );
+  try {
+    await expect.poll(() => updates.length).toBeGreaterThan(0);
+    await clef.send('slow');
+    await expect.poll(() => updates.at(-1)?.messages.at(-1)?.text.length ?? 0).toBeGreaterThan(6);
+    const path = join(clef.home, 'settings.yaml');
+    const source = await readFile(path, 'utf8');
+    await writeFile(path, source.replace('modelId: test-model', 'modelId: second-model'));
+    expect((await clef.settings()).active.models.defaults?.modelId).toBe('second-model');
+    const length = updates.at(-1)?.messages.at(-1)?.text.length ?? 0;
+    await expect
+      .poll(() => updates.at(-1)?.messages.at(-1)?.text.length ?? 0)
+      .toBeGreaterThan(length);
+    expect(updates.at(-1)?.conversation.model.modelId).toBe('test-model');
+    expect(connections).toBe(1);
+    await clef.request.post('/api/conversation/stop', {
+      data: {},
+    });
+    await expect.poll(async () => (await clef.snapshot()).busy).toBe(false);
+    await clef.send('Use saved model');
+    await expect
+      .poll(() => updates.at(-1)?.messages.at(-1)?.text)
+      .toBe('Clef heard: Use saved model');
+    expect(updates.at(-1)?.conversation.model.modelId).toBe('second-model');
+  } finally {
+    abort.abort();
+    await stream;
+  }
 });
 
-test('applies model changes to the next message and replaces a provider connection', async ({
-  page,
-  clef,
-}) => {
-  await clef.setup();
-  await page.goto(clef.url);
-  await expect(
-    page.getByText('test-model', {
-      exact: true,
-    }),
-  ).toBeVisible();
-  await page
-    .getByRole('button', {
-      name: 'Settings',
-    })
-    .click();
-  await page
-    .getByRole('combobox', {
-      name: 'Model',
-      exact: true,
-    })
-    .click();
-  await page
-    .getByRole('option', {
-      name: 'Second model',
-      exact: true,
-    })
-    .click();
-  await page
-    .getByRole('button', {
-      name: 'Save defaults',
-    })
-    .click();
-  const dialog = page.getByRole('dialog', {
-    name: 'Settings',
+test('replaces an encrypted provider connection without resetting defaults', async ({ clef }) => {
+  await clef.connect();
+  const view = await clef.settings();
+  await clef.request.put('/api/models/default', {
+    data: {
+      provider: 'openai',
+      modelId: 'second-model',
+      thinkingLevel: 'off',
+      revision: view.revision,
+    },
   });
-  await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole('status')).toHaveText(
-    'Defaults saved. Applies to your next message.',
-  );
-  for (const model of [
-    'Test model',
-    'Second model',
-  ]) {
-    await dialog
-      .getByRole('combobox', {
-        name: 'Model',
-        exact: true,
-      })
-      .click();
-    await page
-      .getByRole('option', {
-        name: model,
-        exact: true,
-      })
-      .click();
-    await dialog
-      .getByRole('button', {
-        name: 'Save defaults',
-        exact: true,
-      })
-      .click();
-    await expect(dialog.getByRole('status')).toHaveText(
-      'Defaults saved. Applies to your next message.',
-    );
-  }
-  await dialog
-    .getByRole('button', {
-      name: 'Close',
-      exact: true,
-    })
-    .click();
-  await expect(
-    page.getByText('test-model', {
-      exact: true,
-    }),
-  ).toBeVisible();
-  await page.getByPlaceholder('Message Clef…').fill('Use the selected model');
-  await page
-    .getByRole('button', {
-      name: 'Send message',
-    })
-    .click();
-  await expect(
-    page.getByRole('article', {
-      name: 'Clef reply',
-    }),
-  ).toContainText('Clef heard: Use the selected model');
-  await expect(
-    page.getByText('second-model', {
-      exact: true,
-    }),
-  ).toBeVisible();
-  await page
-    .getByRole('button', {
-      name: 'Settings',
-    })
-    .click();
-  await dialog
-    .getByRole('button', {
-      name: 'Manage connections',
-      exact: true,
-    })
-    .click();
-  await dialog
-    .getByRole('button', {
-      name: 'OpenAI',
-      exact: true,
-    })
-    .click();
-  await page
-    .getByLabel('API key', {
-      exact: true,
-    })
-    .fill('replacement-test-api-key');
-  await page
-    .getByRole('button', {
-      name: 'Connect provider',
-    })
-    .click();
-  await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole('status')).toHaveText('Connection saved.');
-  await expect(
-    page.getByLabel('API key', {
-      exact: true,
-    }),
-  ).toHaveValue('');
-  await dialog
-    .getByRole('button', {
-      name: 'All connections',
-      exact: true,
-    })
-    .click();
-  await expect(
-    dialog.getByRole('button', {
-      name: 'OpenAI',
-      exact: true,
-    }),
-  ).toHaveAccessibleDescription('Connected');
-  await dialog
-    .getByRole('navigation')
-    .getByRole('button', {
-      name: 'Default model',
-      exact: true,
-    })
-    .click();
-  await expect(
-    dialog.getByRole('combobox', {
-      name: 'Model',
-      exact: true,
-    }),
-  ).toHaveText('Second model');
-  await dialog
-    .getByRole('button', {
-      name: 'Close',
-      exact: true,
-    })
-    .click();
-  await page.reload();
-  await expect(
-    page.getByText('second-model', {
-      exact: true,
-    }),
-  ).toBeVisible();
+  await clef.request.post('/api/models/key', {
+    data: {
+      provider: 'openai',
+      key: 'replacement-test-api-key',
+    },
+  });
+  await clef.restart();
+  expect((await clef.settings()).active.models.defaults?.modelId).toBe('second-model');
+  expect(
+    (await readFile(join(clef.home, 'state', 'clef.sqlite'))).includes(
+      Buffer.from('replacement-test-api-key'),
+    ),
+  ).toBe(false);
+  await clef.send('Still connected');
+  await expect
+    .poll(async () => (await clef.snapshot()).messages.at(-1)?.text)
+    .toBe('Clef heard: Still connected');
 });

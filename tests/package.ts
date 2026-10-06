@@ -99,7 +99,12 @@ async function installation(root: string, packaged: Awaited<ReturnType<typeof in
     environment,
     config,
     bin,
-    cli: (args: string[] = [], env: NodeJS.ProcessEnv = {}) =>
+    cli: (
+      args: string[] = [
+        'start',
+      ],
+      env: NodeJS.ProcessEnv = {},
+    ) =>
       execute(bin, args, {
         cwd: root,
         env: {
@@ -244,7 +249,7 @@ export const test = base.extend<
   }
 >({
   packaged: [
-    async ({ browserName: _browserName }, use) => {
+    async ({ playwright: _playwright }, use) => {
       const root = await realpath(await mkdtemp(join(tmpdir(), 'clef npm &$%-')));
       try {
         await use(await installPackage(root));

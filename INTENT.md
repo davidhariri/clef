@@ -2,76 +2,62 @@
 
 ## Purpose
 
-Clef is a self-hosted personal AI agent harness.
+Clef is a self-hosted personal AI agent.
 
-Give people a capable personal agent, with an experience close to Muse or Grok Bot, running on compute and storage they control. Personal agents handle deeply private information. Control of that information is the reason for this project, not an optional deployment feature.
+Give people a capable personal agent on compute and storage they control. Personal agents handle deeply private information. Control of that information is the reason for this project, not an optional deployment feature.
 
-User-controlled compute can be a personal machine or a server in the user’s cloud account. It does not require local model inference.
+User-controlled compute can be a personal machine or a server in the user's cloud account. It does not require local inference.
 
 ## Product experience
 
-Clef should earn adoption through capable agent behavior and purpose-built, open-source web, desktop, and mobile apps. The web app is a first-class way to talk to the agent from a desktop browser. It also provides setup and management. A chat relay through Telegram or a similar service is not the primary experience.
+The primary interface is a clean, minimal terminal UI. Typing `clef` opens chat. Typing `/settings` opens server configuration. Keep the transcript, editor, status, and approvals clear. Use Pi-like terminal behavior rather than decorative screens or a web app.
 
-David has used OpenClaw and Hermes and found both their agent behavior and messaging-based experience inadequate. This is the product problem to address, not merely installation friction. Translate concrete examples into behavior evaluations as we build.
+The client and server are separate. Localhost is the default, but the same TUI can connect to a remote server through HTTPS or an SSH tunnel. Closing the client must not stop the server or its agent work. The client does not own the agent loop or persistent agent state.
 
-Dependable execution is a release requirement, not a competitive differentiator.
+Local access uses the OS user, without a Clef account. Remote access uses revocable client credentials. Keep setup short without removing authentication or secret protection.
+
+David found OpenClaw and Hermes inadequate in both agent behavior and messaging-based interaction. Address capable behavior and direct interaction, not only installation friction. A messaging relay is not the primary experience. Dependable execution is a release requirement, not a competitive differentiator.
 
 ## Product invariants
 
-1. **The user controls the deployment and stored data.** Clef must run on user-controlled compute and storage, rather than require a Clef-hosted service to hold personal state.
-2. **The user chooses inference.** Support local and cloud models. Do not silently replace a local model with a cloud model.
-3. **Data flow is clear.** Explain which services receive personal data. Do not claim that self-hosting keeps data private from a cloud model provider when context is sent to that provider.
-4. **Self-hosting must be usable.** Setup, updates, backups, and recovery are part of the product, not maintenance left unexplained to the user.
-5. **The harness is the core.** Keep it small and extensible through a few clear primitives. Add capabilities without turning the core into a collection of app-specific workflows.
-6. **Clef can change its own behaviour.** Let the agent edit non-secret configuration files and build restricted extensions. Validate changes before activation. Keep the server available during configuration reloads.
+1. **The user controls deployment and stored data.** Do not require a Clef-hosted service to hold personal state.
+2. **The user chooses inference.** Support local and cloud models. Never silently replace a local model with a cloud model.
+3. **Data flow is clear.** Explain which services receive personal data. Self-hosting does not hide context from the selected cloud model provider.
+4. **Self-hosting must be usable.** Setup, updates, backups, and recovery are product responsibilities.
+5. **The server is the core.** Keep it small and extensible through clear primitives. Clients use its public interface.
+6. **Clef can change its own behavior.** Allow validated non-secret configuration changes and, when safely bounded, restricted extensions. Keep the server available during reloads.
 
 ## Engineering constraints
 
-- Use TypeScript for the server and agent core. Keep this repo focused on the service and web app. First-party desktop and mobile apps are part of the product; their implementation and repo placement remain undecided.
-- Use Pi Durable as the agent harness and Pi Codemode for restricted JavaScript execution. The first MVP does not include a host shell, Just Bash, or VM workers.
-- Use local SQLite for structured runtime state, including accounts, sessions, traces, analytics events, messages, encrypted secrets, and Pi Durable task state. Keep skills, projects, notes, and other files in a persistent folder or volume.
-- Store non-secret configuration in files as the source of truth, not in a second settings store in SQLite. Configurations contain references to one shared encrypted secret store, never secret values. Trusted server code resolves these references only for authorized operations.
-- Load and reload configuration lazily without restarting the server or breaking client connections. Prepare and validate a replacement before activation. Keep the current valid version if preparation fails.
-- Keep the installation encryption key separate from the user account. Show it for copying during setup only. Keep a protected server copy outside SQLite and the workspace for automatic unlock after restarts.
-- Hash account passwords. Encrypt stored secrets. Keep the encryption key and server credentials out of model context and untrusted code.
-- Do as much work as possible in-process through secure-by-default libraries. Keep model-written JavaScript in the restricted runtime and expose only permission-checked native and MCP tools. Do not load untrusted code into the host JavaScript environment.
-- Deny external access by default. Offer Deny, This time, Always, and Never for clearly shown permission scopes. Apply checks to each nested action, not just its script.
-- Add VM workers later for bounded subagent tasks that need browser use, computer control, or a separate OS isolation boundary. Grant only the data and capabilities needed for the task.
-- On first startup, print a protected web setup link. Use two onboarding steps: account and encryption, then model provider.
-- Support ChatGPT and OpenRouter sign-in, plus API keys for Anthropic, OpenAI, OpenRouter, and other supported Pi providers. Connect local Ollama servers by URL without a user API key. Supply provider-specific model and thinking defaults, editable at Settings > Models > Default.
-- Define a Clef API shared by the web app and planned desktop and mobile apps. Local clients connect to the server without a gateway.
-- Use the web app as the minimum interface for testing agent behavior. Do not maintain a separate CLI chat client. Keep the agent loop and stored state in the server.
-- Support a Linux container installation through Docker, including OrbStack on macOS and Linux cloud VMs such as DigitalOcean Droplets.
-- Support direct installation on Linux and macOS without a container. Do not provide direct Windows support.
-- Make the greater host-access risk of direct installation clear. A container is not a VM and does not protect resources explicitly exposed to it.
-- Build through small, tested, working steps. Use TDD and automate repeatable checks in CI.
-- Prefer simple code, clear names, deep modules, and one supported way to do each thing.
-- Structure the server by domain feature. Keep routes, contracts, behavior, storage, and tests local to their owner. Enforce public interfaces and acyclic dependencies; do not add global business-layer folders or a central storage module.
-- Use Biome as the sole formatter and linter. Use strict TypeScript, Dependency Cruiser, Vitest, and Playwright. Extend E2E coverage as behavior changes; do not complete work with failing or skipped checks.
-- Use `AGENTS.md` and focused skills for practices that need judgment. They do not replace tests or runtime enforcement.
+- Use TypeScript, Pi Durable for the agent harness, and Pi TUI for terminal controls. Keep server and client implementation separate behind the Clef API.
+- Use Pi Codemode for model-written JavaScript. The first MVP does not include a host shell, Just Bash, or required VM workers.
+- Use local SQLite for structured runtime state and a persistent folder or volume for skills, projects, notes, and workspace files.
+- Use configuration files as the source of truth for non-secret settings, with references to one encrypted secret store. Validate complete replacements before activation. Failed reloads retain the last valid configuration.
+- Keep encryption keys and provider credentials out of model context and untrusted code. Protect automatic-unlock keys outside SQLite and the workspace. Do not replace a lost established key.
+- Authenticate every client operation. Deny external tool access by default. Offer Deny, This time, Always, and Never for exact scopes. Scripts cannot grant themselves access.
+- Run trusted tools in-process when this is sufficient. Run untrusted code only in a restricted runtime with bounded resources and checked nested host calls.
+- Add VM workers later for bounded delegated tasks that need browser use, computer control, or separate OS isolation. Do not pass server credentials or unrestricted host access to them.
+- Support ChatGPT and OpenRouter sign-in, supported provider API keys, and local Ollama servers. Preserve explicit model choices. Provider connections never silently replace existing defaults.
+- Keep the server on loopback by default. Support remote clients through HTTPS proxies, including Tailscale Serve, and loopback SSH tunnels. Do not accept ordinary remote HTTP or disable certificate checks.
+- Support direct Linux and macOS installation. Linux container packaging remains planned. There is no direct Windows installation path. A container is not a VM and does not protect exposed mounts or credentials.
+- Build through small tested steps. Follow the [module rules](ARCHITECTURE.md#server-modules) and [quality gates](CONTRIBUTING.md#check-a-change). Do not retain obsolete clients or weaken checks to finish a refactor.
 
 ## First implementation
 
-The working chat slice includes account setup, encrypted provider credentials, key recovery, provider sign-in orchestration, model settings, one persistent conversation, streaming updates, Stop, and web chat. Each server feature owns its behavior and tests. Import and layout checks enforce the module structure.
-
-The web UI uses AI Elements for messages, scrolling, and prompt input, with shadcn/ui controls and dialogs. It keeps the Clef API and server-side agent loop. Web feature boundaries, global CSS placement, and a cognitive-complexity limit of 15 are enforced. Copied UI source versions and exceptions are recorded in `src/web/components/upstream/UPSTREAM.md`.
-
-The stock Markdown and code renderer increases the web bundle. Vite reports generated chunks over 500 kB. This warning remains; the warning threshold was not raised.
+The working slice includes local OS-user access, remote client tokens, encrypted provider credentials, key recovery, provider sign-in orchestration, model settings, a shared main conversation, searchable conversation history, concurrent replies, streaming updates, cancellation, and terminal chat. The TUI provides configuration and inline approvals through the same API. There is no web app or password-login compatibility path.
 
 This is not the complete agent MVP. Keep these limits explicit:
 
-- **Self-configuration is limited to model selection.** `settings.yaml` stores model defaults, bound provider references, and saved permission rules. Valid changes activate lazily. The agent can inspect this configuration and request an exact default change, with an optional switch of its own conversation. Web chat supplies scoped approval. General file access, generic secret references, and extension configuration remain planned. See [configuration limits](ARCHITECTURE.md#configuration-files-and-live-activation).
-- **Code execution is disabled.** Pi Codemode `1.0.1` exposes time and guest-memory limits, but no host-output byte limit. Its `dist/runtime/host.js` appends each output item to a host array. Cutting the returned result cannot prevent this accumulation. Obtain a bounded runtime before exposing scripts. Only the two bounded, trusted configuration tools are enabled. Their tests use controlled provider responses; a live Luna-to-Qwen/Ollama self-switch remains unverified.
-- **One live ChatGPT connection is verified.** On 2026-10-03, David completed sign-in. Read-only inspection confirmed an encrypted OpenAI OAuth credential and a successful `openai-responses` reply from `gpt-6-luna`, with no recorded authentication error. No token values were printed. Token refresh, expired or revoked credentials, and other accounts remain unverified. Automated tests still use controlled external provider behavior with the real server, storage, harness, and browser.
-- **Model defaults need review.** The current rule prefers `gpt-6-luna` when available, otherwise the first available model of the explicitly connected provider. It uses medium thinking when supported. These are provisional choices, not agreed product defaults. Existing defaults never switch when another provider connects.
-- **Local Ollama inference is supported.** Setup accepts a server URL and discovers installed local chat models and supported thinking levels. The URL and defaults persist in `settings.yaml`. Pi's existing OpenAI-compatible adapter handles inference through Pi Durable. Ollama installation, model downloads, cloud Ollama, and server authentication are outside this scope.
-- **Deployment is local only.** Container packaging, remote access, MCP, desktop and mobile apps, and host computer use remain unfinished. The CLI manages a native user-session service on macOS and Linux. Its canonical foreground entry enforces single-process ownership with a kernel-released lock. User-session startup is not privileged startup before login; see [installation](INSTALLATION.md).
-- **Release work remains.** Provider connection cancellation and all provider prompt variants need coverage. Clef-owned code uses the MIT license. Third-party components keep their own licenses. This build is not a security audit.
+- **Self-configuration is limited to model selection.** The agent can inspect non-secret configuration and request an exact default change, optionally switching its own conversation. Terminal chat provides approval. General file access, generic secret references, and extension configuration remain planned. See [configuration limits](ARCHITECTURE.md#configuration-files-and-live-activation).
+- **Code execution is disabled.** Pi Codemode `1.0.1` exposes time and guest-memory limits but no host-output byte limit. Its host collector accumulates output before returning. Truncating the final result does not bound that memory use. Only the two bounded trusted configuration tools are enabled. A live Luna-to-Qwen/Ollama self-switch remains unverified.
+- **Live provider evidence is limited.** David completed ChatGPT sign-in and an OpenAI response on 2026-10-03 with the previous client. This does not verify the new TUI flow, token refresh, expired provider credentials, or other accounts. Automated tests use controlled external providers with the real server, storage, harness, and terminal controls.
+- **Model defaults need review.** The current rule prefers `gpt-6-luna` when available, otherwise the first model of the explicitly connected provider, with medium thinking when supported. These are provisional product defaults.
+- **Ollama is an external service.** Discovery and inference are supported. Ollama installation, downloads, cloud aliases, and server authentication are outside this scope.
+- **Remote transport is client-server, not hosting automation.** Users configure HTTPS, Tailscale, SSH, and network access themselves. Tests cover isolated HTTP and terminal behavior; live tailnet configuration is not verified. The server remains a native user-session service, not a privileged boot service.
+- **Further capabilities remain planned.** Container packaging, MCP connections, restricted extensions, VM workers, and host computer use are unfinished. Provider prompt variants and live cancellation need further verification. This build is not a security audit.
 
 ## Decision status
 
-The purpose, local-or-cloud model choice, and open-source first-party desktop and mobile apps were agreed on 2026-10-03.
+The [architecture](ARCHITECTURE.md) defines the current design. The supported client is the TUI; earlier web and native-app plans are not implementation requirements for this version. Keep the API independent so a later client does not require a new agent loop.
 
-The [architecture](ARCHITECTURE.md) defines the system and installation paths. The first implementation uses Node 24 LTS, Fastify, React/Vite, HTTP/JSON commands, and SSE updates. The first server listens on localhost. Its automatic-unlock key is an owner-only file outside SQLite and the workspace. The server structure is a feature-based modular monolith. The local chat slice uses seven-day login sessions and request IDs for duplicate-send prevention. Production session policy and native app implementation remain open. Pi Codemode is selected for in-process script isolation. Saved web permissions use website origin plus HTTP method. The first web tool is a public HTTPS GET. Rule precedence, MCP connections, and resource limits still need definition. Future VM worker deployment and extension loading remain open. The provisional provider model and thinking defaults need product approval before release. Host discovery is outside the current scope. Future direct installations should support host computer use to operate local software that has no tool API, such as an MCP server.
-
-Local competitor research in `tmp/research/` informs design decisions; it does not settle them. Research files are not tracked in Git.
+Future worker deployment, extension loading, broader tool permissions, and host discovery remain open. Provisional provider defaults need product approval before release. Local research under gitignored `tmp/` informs decisions but does not settle them.

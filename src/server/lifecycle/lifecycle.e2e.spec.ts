@@ -1,9 +1,54 @@
 import { once } from 'node:events';
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
+import { createServer as createSocketServer } from 'node:net';
 import { dirname, join } from 'node:path';
 import { availablePort } from '../../../tests/network.js';
 import { expect, test } from '../../../tests/package.js';
+
+test('reports an incompatible running server and can stop its verified native service', async ({
+  installed,
+}) => {
+  await installed.cli();
+  const path = join(installed.home, 'runtime.sock');
+  await rm(path);
+  const socket = createSocketServer((connection) =>
+    connection.end(
+      JSON.stringify({
+        pid: process.pid,
+        url: `http://127.0.0.1:${installed.port}`,
+        managed: true,
+      }),
+    ),
+  );
+  socket.listen(path);
+  await once(socket, 'listening');
+  try {
+    await expect(
+      installed.cli([
+        'status',
+      ]),
+    ).rejects.toThrow('incompatible readiness format');
+    await expect(
+      installed.cli([
+        'start',
+      ]),
+    ).rejects.toThrow('incompatible readiness format');
+    expect(
+      (
+        await installed.cli([
+          'stop',
+        ])
+      ).stdout,
+    ).toContain('Clef service stopped.');
+    await expect(access(installed.config)).rejects.toThrow();
+  } finally {
+    const closed = once(socket, 'close');
+    socket.close();
+    await closed;
+  }
+  expect((await installed.cli()).stdout).toContain('Clef:');
+});
 
 test('rejects an occupied port before registering a service or opening application data', async ({
   installed,
@@ -28,9 +73,14 @@ test('rejects an occupied port before registering a service or opening applicati
 test('rejects data paths that cannot contain a private readiness socket', async ({ installed }) => {
   const home = join(installed.root, 'x'.repeat(110));
   await expect(
-    installed.cli([], {
-      CLEF_HOME: home,
-    }),
+    installed.cli(
+      [
+        'start',
+      ],
+      {
+        CLEF_HOME: home,
+      },
+    ),
   ).rejects.toThrow('Unix socket path');
   await expect(access(join(home, 'state', 'clef.sqlite'))).rejects.toThrow();
 });
@@ -49,9 +99,14 @@ test('reports an unavailable user-session supervisor without initializing the ap
     },
   );
   await expect(
-    installed.cli([], {
-      PATH: `${commands}:${dirname(process.execPath)}:/usr/bin:/bin`,
-    }),
+    installed.cli(
+      [
+        'start',
+      ],
+      {
+        PATH: `${commands}:${dirname(process.execPath)}:/usr/bin:/bin`,
+      },
+    ),
   ).rejects.toThrow('native user-session service manager is required');
   await expect(access(installed.config)).rejects.toThrow();
   await expect(access(join(installed.home, 'state', 'clef.sqlite'))).rejects.toThrow();
@@ -133,7 +188,7 @@ test('recovers ownership and readiness after the managed process crashes', async
       ])
     ).stdout,
   ).not.toBe(status);
-  expect((await installed.cli()).stdout).toContain('Set up Clef:');
+  expect((await installed.cli()).stdout).toContain('Clef:');
 });
 
 test('removes its auto-start configuration when supervisor registration fails', async ({
@@ -152,9 +207,14 @@ test('removes its auto-start configuration when supervisor registration fails', 
     },
   );
   await expect(
-    installed.cli([], {
-      PATH: `${commands}:${dirname(process.execPath)}:/usr/bin:/bin`,
-    }),
+    installed.cli(
+      [
+        'start',
+      ],
+      {
+        PATH: `${commands}:${dirname(process.execPath)}:/usr/bin:/bin`,
+      },
+    ),
   ).rejects.toThrow('registration denied');
   await expect(access(installed.config)).rejects.toThrow();
   expect(

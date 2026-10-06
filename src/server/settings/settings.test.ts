@@ -301,7 +301,7 @@ it('refuses a named pipe without blocking server startup', async () => {
         [
           '--import',
           'tsx',
-          'src/server/main.ts',
+          'src/main.ts',
           'serve',
         ],
         {
@@ -339,7 +339,7 @@ it('refuses startup with an invalid initial permission policy', async () => {
         [
           '--import',
           'tsx',
-          'src/server/main.ts',
+          'src/main.ts',
           'serve',
         ],
         {

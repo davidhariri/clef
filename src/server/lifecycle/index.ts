@@ -25,8 +25,6 @@ async function waitReady(home: string, manager: ReturnType<typeof supervisor>, p
 }
 
 function verifyReady(ready: Ready, runtime: Runtime) {
-  if (!ready.managed)
-    throw new Error('A foreground Clef server owns this installation. Stop it first.');
   if (new URL(ready.url).port !== String(runtime.port))
     throw new Error(
       'CLEF_PORT conflicts with the running installation. Stop it before changing the port.',
@@ -42,8 +40,7 @@ async function startManaged(
 ) {
   if (ready) {
     verifyReady(ready, runtime);
-    printReady(ready);
-    return;
+    return ready;
   }
   if (loaded) throw new Error('Clef is registered but not ready. Run clef stop, then clef.');
   const releaseOwner = await lock(home, 'owner');
@@ -52,7 +49,7 @@ async function startManaged(
   await writeRuntime(home, runtime);
   try {
     await manager.start(runtime);
-    printReady(await waitReady(home, manager, runtime.port));
+    return await waitReady(home, manager, runtime.port);
   } catch (error) {
     await manager.verify(runtime);
     await manager.stop();
@@ -75,37 +72,50 @@ async function managed(command: string, home: string, runtime: Runtime) {
   try {
     const installed = await readRuntime(home);
     const state = await manager.verify(installed);
+    if (command === 'stop') {
+      await manager.stop();
+      console.info('Clef service stopped. Your data is unchanged.');
+      return;
+    }
+
     const ready = await readiness(home);
     if (ready && (!ready.managed || ready.pid !== state.pid))
       throw new Error('Another Clef process owns this installation. Stop it first.');
 
-    if (command === 'stop') {
-      await manager.stop();
-      console.info('Clef stopped. Your data is unchanged.');
-      return;
-    }
     if (command === 'status') {
       printStatus(ready, state.loaded);
       return;
     }
-    await startManaged(home, runtime, manager, state.loaded, ready);
+    return await startManaged(home, runtime, manager, state.loaded, ready);
   } finally {
     release();
   }
 }
 
-export async function runCli(entry: string, start: StartServer) {
-  const command = process.argv[2] ?? 'start';
+function cliCommand() {
+  const command = process.argv[2] ?? 'chat';
   if (
     process.argv.length > 3 ||
     ![
+      'chat',
       'start',
       'serve',
       'status',
       'stop',
     ].includes(command)
   )
-    throw new Error('Usage: clef [start | status | stop | serve]');
+    throw new Error('Usage: clef [start | status | stop | serve] or clef --server <https-url>');
+  if (command === 'chat' && (!process.stdin.isTTY || !process.stdout.isTTY))
+    throw new Error('Chat needs an interactive terminal. Use clef start to start the server.');
+  return command;
+}
+
+export async function runCli(
+  entry: string,
+  start: StartServer,
+  chat: (ready: Ready) => Promise<void>,
+) {
+  const command = cliCommand();
   const port = Number(process.env.CLEF_PORT ?? 3737);
   if (!Number.isInteger(port) || port < 1 || port > 65535)
     throw new Error('CLEF_PORT must be a port number.');
@@ -122,9 +132,21 @@ export async function runCli(entry: string, start: StartServer) {
   )
     throw new Error('Clef installation paths cannot contain line breaks or null bytes.');
   if (command === 'serve') return serve(home, port, start);
-  await managed(command, home, {
+  const runtime = {
     node: process.execPath,
     entry,
     port,
-  });
+  };
+  if (command === 'chat') {
+    const running = await readiness(home);
+    if (running) {
+      verifyReady(running, runtime);
+      return chat(running);
+    }
+  }
+  const ready = await managed(command, home, runtime);
+  if (ready) {
+    if (command === 'chat') await chat(ready);
+    else printReady(ready);
+  }
 }
