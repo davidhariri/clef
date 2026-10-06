@@ -192,7 +192,28 @@ Store persistent permission rules in configuration files. Let the user inspect a
 
 Check network destinations and redirects before sending requests. Do not treat approval of an MCP server URL as approval of every tool it provides. Clef can restrict which MCP calls it sends, but it cannot enforce its local sandbox rules inside an independent MCP server.
 
-The registry contains the trusted tools `settings_inspect`, `settings_change`, `files_access`, and `files`, plus the bounded [`present_ui` tool](#model-composed-interfaces). Configuration and file bounds are defined below. Keep scripts, shell tools, network tools, and imported extensions disabled until their required bounds are available and tested. Set explicit limits for script time, memory, output, and host-call work. Apply output limits before host buffering, not only after an execution returns. Permission waits must also expire. Stopping a script must cancel pending approvals and signal active tools to stop. Cancellation does not undo completed external actions. Do not blindly replay an interrupted script that may have caused side effects.
+The registry contains the trusted tools `settings_inspect`, `settings_change`, `files_access`, and `files`, plus the bounded [`present_ui` tool](#model-composed-interfaces). Configuration and file bounds are defined below. Keep scripts, shell tools, network tools, and imported extensions disabled until their required bounds are available and tested. Permission waits must also expire. Stopping a script must cancel pending approvals and signal active tools to stop. Cancellation does not undo completed external actions. Do not blindly replay an interrupted script that may have caused side effects.
+
+### Planned script limits
+
+The agent feature owns Codemode integration. Reuse Pi Codemode's runtime and limits, not a second sandbox. These are implementation decisions; scripts remain disabled until enforcement and tests are complete. Wait for upstream Pi Codemode support for bounded bridge messages, return values, and host-call work. Do not maintain a local runtime patch.
+
+| Resource | Limit | Source |
+| --- | --- | --- |
+| Guest heap | 256 MiB per script | Pi coding agent |
+| Printed output | 16777216 characters of text and base64 image data; 100000 output items | Pi Codemode |
+| Model-visible text | 10000 estimated tokens, using four characters per token | Pi coding agent |
+| Script deadline | Five minutes, including approval waits | Pi Codemode library default; Pi's CLI instead defaults to no deadline |
+| Active host calls | Eight across script tools; keep the existing file-action limit too | Clef's file-action policy |
+| Total host calls | 1000 attempts per script, including invalid and denied calls | Clef server protection |
+
+Script options may reduce the deadline and model-visible text budget, but cannot raise these server limits. Do not add user settings for these limits yet. Pi's four-call concurrency limit applies to classifier and image model calls, not ordinary tools; it is not a general tool-call limit.
+
+Count the serialized return value against the same output budget before it crosses into the host. Check output and host-call message sizes before queueing or host accumulation. Arguments and results must meet the called tool's existing limits. Bound queued calls and call records with the total-call budget. Stop the script when it exceeds a hard resource limit; catching a tool error must not reset that limit.
+
+For model-visible text, keep the start and end when truncating, as Pi does. Truncation is a presentation rule, not the memory limit. Save full output only through Clef's checked workspace operations and existing quota; do not copy Pi's unrestricted temporary-file writes. If the save fails, report truncation without a saved artifact.
+
+Use the existing validation, authorization, cancellation, and unsafe-replay rules for nested calls. Do not expose recursive Codemode calls or add persistent script state in this slice. Test heap exhaustion, excessive output and return values, call floods, cancellation, expired approvals, and host responsiveness before enabling scripts.
 
 ### Future VM workers
 
