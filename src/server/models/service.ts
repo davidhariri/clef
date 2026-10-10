@@ -47,7 +47,7 @@ export class Models {
 
   private refreshOllama(configuration: ModelConfiguration): Promise<void> {
     const url = configuration.connections.find((item) => 'url' in item)?.url;
-    if (url === this.ollamaServerUrl) return this.ollamaReady;
+    if (url === this.ollamaServerUrl && !this.ollamaError) return this.ollamaReady;
 
     this.ollamaServerUrl = url;
     this.ollamaError = undefined;

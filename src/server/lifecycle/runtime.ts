@@ -8,6 +8,7 @@ import { lock } from './repository.js';
 const readySchema = z.object({
   pid: z.number().int().positive(),
   url: z.url(),
+  token: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
   managed: z.boolean(),
 });
 export type Ready = z.infer<typeof readySchema>;
@@ -15,7 +16,8 @@ export type StartServer = (
   home: string,
   port: number,
 ) => Promise<{
-  url: () => Promise<string>;
+  url: string;
+  token: string;
   close: () => Promise<void>;
 }>;
 
@@ -36,7 +38,13 @@ export async function readiness(home: string): Promise<Ready | undefined> {
       text += chunk.toString();
       if (text.length > 8192) throw new Error('Invalid Clef readiness response.');
     }
-    return readySchema.parse(JSON.parse(text));
+    try {
+      return readySchema.parse(JSON.parse(text));
+    } catch {
+      throw new Error(
+        'The running Clef server uses an incompatible readiness format. Stop it with its original launcher, then start this version.',
+      );
+    }
   } catch (error) {
     if (
       error instanceof Error &&
@@ -82,16 +90,13 @@ export async function serve(home: string, port: number, start: StartServer) {
     });
     const socket = createServer((connection) => {
       connection.on('error', () => connection.destroy());
-      application.url().then(
-        (url) =>
-          connection.end(
-            JSON.stringify({
-              pid: process.pid,
-              url,
-              managed,
-            }),
-          ),
-        () => connection.destroy(),
+      connection.end(
+        JSON.stringify({
+          pid: process.pid,
+          url: application.url,
+          token: application.token,
+          managed,
+        }),
       );
     });
     socket.listen(path);
@@ -100,7 +105,8 @@ export async function serve(home: string, port: number, start: StartServer) {
     if (!managed)
       printReady({
         pid: process.pid,
-        url: await application.url(),
+        url: application.url,
+        token: application.token,
         managed,
       });
     for (const signal of [
@@ -128,5 +134,5 @@ export async function serve(home: string, port: number, start: StartServer) {
 }
 
 export function printReady(ready: Ready) {
-  console.info(ready.url.includes('#setup=') ? `Set up Clef: ${ready.url}` : `Clef: ${ready.url}`);
+  console.info(`Clef: ${ready.url}`);
 }

@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { chmod, readFile, writeFile } from 'node:fs/promises';
 import type { Credential, CredentialStore } from '@earendil-works/pi-ai';
 import { z } from 'zod';
@@ -103,6 +103,11 @@ export class Credentials {
       if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return;
       throw new Error('The installation key cannot be read. Restore the key file.');
     }
+  }
+
+  async provision(): Promise<void> {
+    if (await this.repository.keyCheck()) return;
+    await this.initializeKey(this.key?.toString('hex') ?? randomBytes(32).toString('hex'));
   }
 
   async initializeKey(keyText: string): Promise<void> {

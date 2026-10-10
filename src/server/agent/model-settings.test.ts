@@ -64,35 +64,15 @@ it('keeps an active reply on its model and uses saved settings for the next inpu
   } as const;
   try {
     const conversation = await agent.open(first);
-    await agent.send(
-      {
-        text: 'Remember me',
-        requestId: crypto.randomUUID(),
-      },
-      first,
-    );
+    await agent.send('Remember me', crypto.randomUUID(), first);
     await vi.waitFor(async () =>
       expect((await agent.snapshot()).messages.at(-1)?.text).toContain('A slow'),
     );
-    await expect(
-      agent.send(
-        {
-          text: 'Not yet',
-          requestId: crypto.randomUUID(),
-        },
-        second,
-      ),
-    ).rejects.toThrow();
+    await expect(agent.send('Not yet', crypto.randomUUID(), second)).rejects.toThrow();
     expect((await agent.snapshot()).conversation.model).toEqual(first);
     await agent.stop();
 
-    await agent.send(
-      {
-        text: 'Continue',
-        requestId: crypto.randomUUID(),
-      },
-      second,
-    );
+    await agent.send('Continue', crypto.randomUUID(), second);
     await vi.waitFor(async () => expect((await agent.snapshot()).busy).toBe(false));
     const snapshot = await agent.snapshot();
     expect(snapshot.conversation.id).toBe(conversation.id);

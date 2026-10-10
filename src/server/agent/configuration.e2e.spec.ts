@@ -1,24 +1,4 @@
-import type { Page } from '@playwright/test';
-import { expect, test } from '../../../tests/browser.js';
-import { snapshotSchema } from '../messages/contract.js';
-import { settingsViewSchema } from '../settings/contract.js';
-
-async function send(page: Page, text: string) {
-  await page.getByPlaceholder('Message Clef…').fill(text);
-  await page
-    .getByRole('button', {
-      name: 'Send message',
-    })
-    .click();
-}
-
-async function settings(page: Page, url: string) {
-  return settingsViewSchema.parse(await (await page.request.get(`${url}/api/settings`)).json());
-}
-
-async function snapshot(page: Page, url: string) {
-  return snapshotSchema.parse(await (await page.request.get(`${url}/api/conversation`)).json());
-}
+import { expect, test } from '../../../tests/api.js';
 
 for (const [name, overrides] of Object.entries({
   policy: {
@@ -49,20 +29,15 @@ for (const [name, overrides] of Object.entries({
     test.use({
       configurationOverrides: overrides,
     });
-    test('rejects the tool call without an approval or settings change', async ({ page, clef }) => {
-      await clef.setup();
-      const before = await settings(page, clef.url);
-      await page.goto(clef.url);
-      await send(page, 'configure switch');
-      await expect(
-        page
-          .getByRole('article', {
-            name: 'Clef reply',
-          })
-          .last(),
-      ).toContainText('Configuration finished on test-model. Rejected.');
-      expect(await settings(page, clef.url)).toEqual(before);
-      expect((await snapshot(page, clef.url)).permissions).toEqual([]);
+    test('rejects the tool call without an approval or settings change', async ({ clef }) => {
+      await clef.connect();
+      const before = await clef.settings();
+      await clef.send('configure switch');
+      await expect
+        .poll(async () => (await clef.snapshot()).messages.at(-1)?.text)
+        .toContain('Rejected.');
+      expect(await clef.settings()).toEqual(before);
+      expect((await clef.snapshot()).permissions).toEqual([]);
     });
   });
 }
@@ -71,22 +46,14 @@ test.describe('bounded inspection', () => {
   test.use({
     modelName: 'x'.repeat(16384),
   });
-  test('rejects an oversized tool result before returning it to the model', async ({
-    page,
-    clef,
-  }) => {
-    await clef.setup();
-    const before = await settings(page, clef.url);
-    await page.goto(clef.url);
-    await send(page, 'configure switch');
-    await expect(
-      page
-        .getByRole('article', {
-          name: 'Clef reply',
-        })
-        .last(),
-    ).toContainText('Configuration inspection rejected.');
-    const view = await snapshot(page, clef.url);
+  test('rejects an oversized tool result before returning it to the model', async ({ clef }) => {
+    await clef.connect();
+    const before = await clef.settings();
+    await clef.send('configure switch');
+    await expect
+      .poll(async () => (await clef.snapshot()).messages.at(-1)?.text)
+      .toContain('Configuration inspection rejected.');
+    const view = await clef.snapshot();
     expect(view.permissions).toEqual([]);
     expect(view.messages.filter((message) => message.role === 'tool')).toEqual([
       expect.objectContaining({
@@ -94,24 +61,20 @@ test.describe('bounded inspection', () => {
       }),
     ]);
     expect(JSON.stringify(view)).not.toContain('x'.repeat(16384));
-    expect(await settings(page, clef.url)).toEqual(before);
+    expect(await clef.settings()).toEqual(before);
   });
 });
 
 for (const choice of [
-  'Deny',
-  'Never',
+  'deny',
+  'never',
 ]) {
-  test(`${choice} blocks writes and switches without leaking secrets`, async ({ page, clef }) => {
-    await clef.setup();
-    const before = await settings(page, clef.url);
-    await page.goto(clef.url);
-    await send(page, 'configure switch');
-    const approval = page.getByRole('region', {
-      name: 'Configuration approval',
-    });
-    await expect(approval).toBeVisible();
-    const pending = await snapshot(page, clef.url);
+  test(`${choice} blocks writes and switches without leaking secrets`, async ({ clef }) => {
+    await clef.connect();
+    const before = await clef.settings();
+    await clef.send('configure switch');
+    await expect.poll(async () => (await clef.snapshot()).permissions.length).toBe(1);
+    const pending = await clef.snapshot();
     const request = pending.permissions[0];
     expect(request).toMatchObject({
       kind: 'configuration',
@@ -125,261 +88,177 @@ for (const choice of [
       switchConversation: true,
     });
     expect(JSON.stringify(pending)).not.toContain('test-api-key');
-    expect(JSON.stringify(pending)).not.toContain('a'.repeat(64));
-    expect(await settings(page, clef.url)).toEqual(before);
-    await approval
-      .getByRole('button', {
-        name: choice,
-        exact: true,
-      })
-      .click();
-    await expect(
-      page
-        .getByRole('article', {
-          name: 'Clef reply',
+    expect(JSON.stringify(pending)).not.toContain(clef.token);
+    expect(await clef.settings()).toEqual(before);
+    expect(
+      (
+        await clef.request.post(`/api/conversation/permissions/${request?.id}`, {
+          data: {
+            choice,
+          },
         })
-        .last(),
-    ).toContainText('Configuration finished on test-model. Rejected.');
-    const after = await settings(page, clef.url);
+      ).ok(),
+    ).toBe(true);
+    await expect
+      .poll(async () => (await clef.snapshot()).messages.at(-1)?.text)
+      .toContain('Configuration finished on test-model. Rejected.');
+    const after = await clef.settings();
     expect(after.active.models).toEqual(before.active.models);
-    expect(after.active.permissions).toHaveLength(choice === 'Never' ? 1 : 0);
+    expect(after.active.permissions).toHaveLength(choice === 'never' ? 1 : 0);
+    await expect.poll(async () => (await clef.snapshot()).busy).toBe(false);
     await clef.restart();
-    await page.reload();
-    await send(page, 'configure switch again');
-    if (choice === 'Never') {
-      await expect(
-        page
-          .getByRole('article', {
-            name: 'Clef reply',
-          })
-          .last(),
-      ).toContainText('Configuration finished on test-model. Rejected.');
-      expect((await snapshot(page, clef.url)).permissions).toEqual([]);
+    await clef.send('configure switch again');
+    if (choice === 'never') {
+      await expect
+        .poll(async () => (await clef.snapshot()).messages.at(-1)?.text)
+        .toContain('Rejected.');
+      expect((await clef.snapshot()).permissions).toEqual([]);
     } else {
-      await expect(approval).toBeVisible();
-      await approval
-        .getByRole('button', {
-          name: 'Deny',
-          exact: true,
-        })
-        .click();
+      await expect.poll(async () => (await clef.snapshot()).permissions.length).toBe(1);
+      const next = (await clef.snapshot()).permissions[0];
+      await clef.request.post(`/api/conversation/permissions/${next?.id}`, {
+        data: {
+          choice: 'deny',
+        },
+      });
     }
-    expect((await settings(page, clef.url)).active.models).toEqual(before.active.models);
+    expect((await clef.settings()).active.models).toEqual(before.active.models);
   });
 }
 
 for (const interruption of [
-  'Stop',
+  'stop',
   'restart',
 ]) {
   test(`${interruption} invalidates pending approvals without replaying the change`, async ({
-    page,
     clef,
   }) => {
-    await clef.setup();
-    const before = await settings(page, clef.url);
-    await page.goto(clef.url);
-    await send(page, 'configure switch');
-    await expect(
-      page.getByRole('region', {
-        name: 'Configuration approval',
-      }),
-    ).toBeVisible();
-    const pending = await snapshot(page, clef.url);
-    if (interruption === 'Stop') {
-      await page
-        .getByRole('button', {
-          name: 'Stop reply',
+    await clef.connect();
+    const before = await clef.settings();
+    await clef.send('configure switch');
+    await expect.poll(async () => (await clef.snapshot()).permissions.length).toBe(1);
+    const pending = await clef.snapshot();
+    if (interruption === 'stop')
+      await clef.request.post('/api/conversation/stop', {
+        data: {},
+      });
+    else await clef.restart();
+    await expect.poll(async () => (await clef.snapshot()).busy).toBe(false);
+    expect((await clef.snapshot()).permissions).toEqual([]);
+    expect(
+      (
+        await clef.request.post(`/api/conversation/permissions/${pending.permissions[0]?.id}`, {
+          data: {
+            choice: 'always',
+          },
         })
-        .click();
-    } else {
-      await clef.restart();
-      await page.reload();
-    }
-    await expect(
-      page.getByRole('region', {
-        name: 'Configuration approval',
-      }),
-    ).toHaveCount(0);
-    await expect(
-      page.getByRole('button', {
-        name: 'Stop reply',
-      }),
-    ).toHaveCount(0);
-    const response = await page.request.post(
-      `${clef.url}/api/conversation/permissions/${pending.permissions[0]?.id}`,
-      {
-        data: {
-          choice: 'always',
-        },
-      },
-    );
-    expect(response.status()).toBe(409);
-    expect(await settings(page, clef.url)).toEqual(before);
-    expect((await snapshot(page, clef.url)).conversation.model.modelId).toBe('test-model');
-    await send(page, 'Still here');
-    await expect(
-      page
-        .getByRole('article', {
-          name: 'Clef reply',
-        })
-        .last(),
-    ).toContainText('Clef heard: Still here');
+      ).status(),
+    ).toBe(409);
+    expect(await clef.settings()).toEqual(before);
+    expect((await clef.snapshot()).conversation.model.modelId).toBe('test-model');
+    await clef.send('Still here');
+    await expect
+      .poll(async () => (await clef.snapshot()).messages.at(-1)?.text)
+      .toBe('Clef heard: Still here');
   });
 }
 
-test('rejects a stale approval after an overlapping settings edit', async ({ page, clef }) => {
-  await clef.setup();
-  await page.goto(clef.url);
-  await send(page, 'configure switch');
-  await expect(
-    page.getByRole('region', {
-      name: 'Configuration approval',
-    }),
-  ).toBeVisible();
-  const view = await settings(page, clef.url);
-  const update = await page.request.put(`${clef.url}/api/models/default`, {
+test('rejects a stale approval after an overlapping settings edit', async ({ clef }) => {
+  await clef.connect();
+  await clef.send('configure switch');
+  await expect.poll(async () => (await clef.snapshot()).permissions.length).toBe(1);
+  const pending = (await clef.snapshot()).permissions[0];
+  const view = await clef.settings();
+  expect(
+    (
+      await clef.request.put('/api/models/default', {
+        data: {
+          ...view.active.models.defaults,
+          modelId: 'second-model',
+          revision: view.revision,
+        },
+      })
+    ).ok(),
+  ).toBe(true);
+  const changed = await clef.settings();
+  await clef.request.post(`/api/conversation/permissions/${pending?.id}`, {
     data: {
-      ...view.active.models.defaults,
-      modelId: 'second-model',
-      revision: view.revision,
+      choice: 'once',
     },
   });
-  expect(update.status()).toBe(200);
-  const changed = await settings(page, clef.url);
-  await page
-    .getByRole('button', {
-      name: 'This time',
-      exact: true,
-    })
-    .click();
-  await expect(
-    page
-      .getByRole('article', {
-        name: 'Clef reply',
-      })
-      .last(),
-  ).toContainText('Configuration finished on test-model. Rejected.');
-  expect(await settings(page, clef.url)).toEqual(changed);
-  expect((await snapshot(page, clef.url)).conversation.model.modelId).toBe('test-model');
+  await expect
+    .poll(async () => (await clef.snapshot()).messages.at(-1)?.text)
+    .toContain('Configuration finished on test-model. Rejected.');
+  expect(await clef.settings()).toEqual(changed);
+  expect((await clef.snapshot()).conversation.model.modelId).toBe('test-model');
 });
 
 test('Always persists only the displayed model, conversation and switch scope', async ({
-  page,
   clef,
 }) => {
-  await clef.setup();
-  await page.goto(clef.url);
-  await send(page, 'configure defaults only');
-  await expect(
-    page.getByRole('region', {
-      name: 'Configuration approval',
-    }),
-  ).toContainText('Do not switch this reply. Saved defaults apply to your next message.');
-  await page
-    .getByRole('button', {
-      name: 'Always',
-      exact: true,
-    })
-    .click();
-  await expect(
-    page
-      .getByRole('article', {
-        name: 'Clef reply',
-      })
-      .last(),
-  ).toContainText('Configuration finished on test-model. Applied.');
+  await clef.connect();
+  await clef.send('configure defaults only');
+  await expect.poll(async () => (await clef.snapshot()).permissions.length).toBe(1);
+  const pending = (await clef.snapshot()).permissions[0];
+  expect(pending).toMatchObject({
+    switchConversation: false,
+  });
+  await clef.request.post(`/api/conversation/permissions/${pending?.id}`, {
+    data: {
+      choice: 'always',
+    },
+  });
+  await expect
+    .poll(async () => (await clef.snapshot()).messages.at(-1)?.text)
+    .toContain('Configuration finished on test-model. Applied.');
+  await expect.poll(async () => (await clef.snapshot()).busy).toBe(false);
   await clef.restart();
-  await page.reload();
-  await send(page, 'configure defaults only again');
-  await expect(
-    page
-      .getByRole('article', {
-        name: 'Clef reply',
-      })
-      .last(),
-  ).toContainText('Configuration finished on second-model. Applied.');
-  expect((await snapshot(page, clef.url)).permissions).toEqual([]);
+  await clef.send('configure defaults only again');
+  await expect
+    .poll(async () => (await clef.snapshot()).messages.at(-1)?.text)
+    .toContain('Configuration finished on second-model. Applied.');
+  expect((await clef.snapshot()).permissions).toEqual([]);
   for (const text of [
     'configure original defaults only',
     'configure switch',
   ]) {
-    await send(page, text);
-    await expect(
-      page.getByRole('region', {
-        name: 'Configuration approval',
-      }),
-    ).toBeVisible();
-    await page
-      .getByRole('button', {
-        name: 'Deny',
-        exact: true,
-      })
-      .click();
-    await expect(
-      page
-        .getByRole('article', {
-          name: 'Clef reply',
-        })
-        .last(),
-    ).toContainText('Rejected.');
+    await expect.poll(async () => (await clef.snapshot()).busy).toBe(false);
+    await clef.send(text);
+    await expect.poll(async () => (await clef.snapshot()).permissions.length).toBe(1);
+    const next = (await clef.snapshot()).permissions[0];
+    await clef.request.post(`/api/conversation/permissions/${next?.id}`, {
+      data: {
+        choice: 'deny',
+      },
+    });
+    await expect
+      .poll(async () => (await clef.snapshot()).messages.at(-1)?.text)
+      .toContain('Rejected.');
   }
-  expect((await settings(page, clef.url)).active.permissions).toHaveLength(1);
+  expect((await clef.settings()).active.permissions).toHaveLength(1);
 });
 
 test('requires approval and switches the persistent conversation at the next model request', async ({
-  page,
   clef,
 }) => {
-  await clef.setup();
-  const original = await snapshot(page, clef.url);
-  await page.goto(clef.url);
-  await expect(page.locator('header')).toContainText('Connected');
-  await expect(page.locator('header')).not.toContainText('Loading…');
-  await page.getByPlaceholder('Message Clef…').fill('configure switch');
-  await page
-    .getByRole('button', {
-      name: 'Send message',
-    })
-    .click();
-  await expect(
-    page.getByRole('region', {
-      name: 'Configuration approval',
-    }),
-  ).toBeVisible();
-  expect((await (await page.request.get(`${clef.url}/api/models`)).json()).defaults.modelId).toBe(
-    'test-model',
-  );
-  await page
-    .getByRole('button', {
-      name: 'This time',
-      exact: true,
-    })
-    .click();
-  await expect(
-    page
-      .getByRole('article', {
-        name: 'Clef reply',
-      })
-      .last(),
-  ).toContainText('Configuration finished on second-model. Applied.');
-  expect((await (await page.request.get(`${clef.url}/api/models`)).json()).defaults.modelId).toBe(
-    'second-model',
-  );
-  expect((await snapshot(page, clef.url)).conversation.id).toBe(original.conversation.id);
+  await clef.connect();
+  const original = await clef.snapshot();
+  await clef.send('configure switch');
+  await expect.poll(async () => (await clef.snapshot()).permissions.length).toBe(1);
+  expect((await clef.settings()).active.models.defaults?.modelId).toBe('test-model');
+  const pending = (await clef.snapshot()).permissions[0];
+  await clef.request.post(`/api/conversation/permissions/${pending?.id}`, {
+    data: {
+      choice: 'once',
+    },
+  });
+  await expect
+    .poll(async () => (await clef.snapshot()).messages.at(-1)?.text)
+    .toContain('Configuration finished on second-model. Applied.');
+  expect((await clef.settings()).active.models.defaults?.modelId).toBe('second-model');
+  expect((await clef.snapshot()).conversation.id).toBe(original.conversation.id);
+  await expect.poll(async () => (await clef.snapshot()).busy).toBe(false);
   await clef.restart();
-  await page.reload();
-  await expect(page.locator('header')).toContainText('second-model');
-  await send(page, 'configure switch again');
-  await expect(
-    page.getByRole('region', {
-      name: 'Configuration approval',
-    }),
-  ).toBeVisible();
-  await page
-    .getByRole('button', {
-      name: 'Deny',
-      exact: true,
-    })
-    .click();
+  await clef.send('configure switch again');
+  await expect.poll(async () => (await clef.snapshot()).permissions.length).toBe(1);
 });

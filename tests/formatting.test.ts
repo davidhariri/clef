@@ -46,16 +46,16 @@ it('expands objects and preserves the space between preparation and return', () 
 
 it.each([
   [
-    'src/web/messages/example.ts',
+    'src/tui/messages/example.ts',
     1,
   ],
   [
-    'src/server/accounts/example.ts',
+    'src/server/access/example.ts',
     1,
   ],
   [
-    'src/web/components/upstream/ai-elements/example.ts',
-    0,
+    'src/tui/components/example.ts',
+    1,
   ],
 ])('applies the complexity policy to %s', async (path, status) => {
   const source = `export function nested(value: boolean) { ${'if (value) { '.repeat(6)} return 1; ${'} '.repeat(6)} return 0; }`;

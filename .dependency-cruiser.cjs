@@ -5,7 +5,7 @@ const modules = readdirSync('src/server', {
 })
   .filter((entry) => entry.isDirectory() && entry.name !== 'platform')
   .map((entry) => entry.name);
-const webFeatures = readdirSync('src/web', {
+const tuiFeatures = readdirSync('src/tui', {
   withFileTypes: true,
 })
   .filter(
@@ -58,44 +58,44 @@ module.exports = {
         pathNot: `^src/server/${name}/(index|contract)\\.ts$`,
       },
     })),
-    ...webFeatures.map((name) => ({
-      name: `web-${name}-private-implementation`,
+    ...tuiFeatures.map((name) => ({
+      name: `tui-${name}-private-implementation`,
       severity: 'error',
       from: {
-        pathNot: `^src/web/${name}/`,
+        pathNot: `^src/tui/${name}/`,
       },
       to: {
-        path: `^src/web/${name}/`,
-        pathNot: `^src/web/${name}/index\\.tsx?$`,
+        path: `^src/tui/${name}/`,
+        pathNot: `^src/tui/${name}/index\\.ts$`,
       },
     })),
     {
-      name: 'web-components-have-no-app-dependencies',
+      name: 'tui-components-have-no-app-dependencies',
       severity: 'error',
       from: {
-        path: '^src/web/components/',
+        path: '^src/tui/components/',
       },
       to: {
         path: '^src/',
-        pathNot: '^src/web/components/',
+        pathNot: '^src/tui/components/',
       },
     },
     {
-      name: 'web-platform-has-no-features',
+      name: 'tui-platform-has-no-features',
       severity: 'error',
       from: {
-        path: '^src/web/platform/',
+        path: '^src/tui/platform/',
       },
       to: {
-        path: '^src/web/',
-        pathNot: '^src/web/platform/',
+        path: '^src/tui/',
+        pathNot: '^src/tui/platform/',
       },
     },
     {
       name: 'clients-only-import-contracts',
       severity: 'error',
       from: {
-        path: '^src/(web|client)/',
+        path: '^src/(tui|client)/',
       },
       to: {
         path: '^src/server/',
@@ -106,14 +106,24 @@ module.exports = {
       name: 'clients-never-import-the-harness',
       severity: 'error',
       from: {
-        path: '^src/(web|client)/',
+        path: '^src/(tui|client)/',
       },
       to: {
         path: 'node_modules/@earendil-works/pi-(durable|ai|codemode)',
       },
     },
     {
-      name: 'contracts-are-browser-safe',
+      name: 'server-has-no-clients',
+      severity: 'error',
+      from: {
+        path: '^src/server/',
+      },
+      to: {
+        path: '^src/(tui|client)/|node_modules/@earendil-works/pi-tui',
+      },
+    },
+    {
+      name: 'contracts-are-client-safe',
       severity: 'error',
       from: {
         path: '^src/server/[^/]+/contract\\.ts$',
@@ -153,7 +163,7 @@ module.exports = {
         path: '^src/server/platform/',
       },
       to: {
-        path: '^src/(server|web|client)/',
+        path: '^src/(server|tui|client)/',
         pathNot: '^src/server/platform/',
       },
     },
@@ -219,7 +229,7 @@ module.exports = {
         pathNot: tests,
       },
       to: {
-        path: `${tests}|^tests/|node_modules/(vitest|@playwright/test)`,
+        path: `${tests}|^tests/|node_modules/(vitest|@playwright/test|@xterm/headless)`,
       },
     },
   ],

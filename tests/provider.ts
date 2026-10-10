@@ -6,7 +6,6 @@ import {
   type Provider,
   type TranscriptContext,
 } from '@earendil-works/pi-ai';
-import { testUiSpec } from './presentation.js';
 
 function configurationResponse(
   context: TranscriptContext,
@@ -87,10 +86,6 @@ export function testProvider(
         const last = context.messages.filter((message) => message.role === 'user').at(-1);
         const text = typeof last?.content === 'string' ? last.content : 'hello';
         if (text.startsWith('file ')) return fileResponse(context, text);
-        if (text === 'present preferences')
-          return fauxAssistantMessage(fauxToolCall('present_ui', testUiSpec), {
-            stopReason: 'toolUse',
-          });
         if (text.startsWith('configure '))
           return configurationResponse(context, text, model, overrides);
         return fauxAssistantMessage(

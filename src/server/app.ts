@@ -1,8 +1,5 @@
-import { randomBytes } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
 import type { Provider } from '@earendil-works/pi-ai';
-import staticFiles from '@fastify/static';
-import { openAccounts, registerAccountRoutes } from './accounts/index.js';
+import { openAccess, registerAccessRoutes } from './access/index.js';
 import { openAgent } from './agent/index.js';
 import { openCredentials, registerCredentialRoutes } from './credentials/index.js';
 import { openFiles, registerFileRoutes } from './files/index.js';
@@ -16,9 +13,8 @@ import { registerSettingsRoutes, Settings } from './settings/index.js';
 export async function createApp(options: { home: string; providers?: readonly Provider[] }) {
   const installation = await openInstallation(options.home);
   const credentials = await openCredentials(installation.database, installation.keyPath);
-  const accounts = await openAccounts(installation.database, (key) =>
-    credentials.initializeKey(key),
-  );
+  await credentials.provision();
+  const access = await openAccess(installation.database, options.home);
   const settings = new Settings(options.home);
   const models = await openModels(
     installation.database,
@@ -32,18 +28,13 @@ export async function createApp(options: { home: string; providers?: readonly Pr
   const agent = await openAgent(installation.database, models, settings, permissions, files);
 
   const server = await createHttpServer();
-  const setupToken = randomBytes(32).toString('base64url');
 
-  registerAccountRoutes(server, accounts, credentials, models, setupToken);
+  registerAccessRoutes(server, access, credentials, models);
   registerCredentialRoutes(server, credentials);
   registerModelRoutes(server, models);
   registerSettingsRoutes(server, settings);
   registerFileRoutes(server, files);
   registerMessageRoutes(server, agent, models, permissions);
-
-  await server.register(staticFiles, {
-    root: fileURLToPath(new URL('../../dist', import.meta.url)),
-  });
 
   server.addHook('onClose', async () => {
     permissions.close();
@@ -55,9 +46,6 @@ export async function createApp(options: { home: string; providers?: readonly Pr
 
   return {
     server,
-    setupToken,
-    async entryUrl(url: string) {
-      return (await accounts.hasAccount()) ? url : `${url}/#setup=${setupToken}`;
-    },
+    localToken: access.localToken,
   };
 }

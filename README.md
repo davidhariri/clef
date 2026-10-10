@@ -14,9 +14,9 @@ npm install -g @davidhariri/clef@latest --ignore-scripts
 clef
 ```
 
-Open the setup link printed in your terminal. Create your account, save your recovery key, and connect a model provider. The package includes the built server and web app; installation does not need scripts or a source checkout.
+`clef` opens terminal chat. On first use, connect a model provider in Settings. There is no Clef username, password, or web app. The package includes the server and terminal client; installation needs no scripts or source checkout.
 
-Clef runs in the background and starts with your user session. You can close the terminal. Use `clef status` to check it and `clef stop` to stop it and disable automatic startup. These commands preserve your data.
+The server runs in the background and starts with your user session. Exiting chat does not stop it. Use `clef status` to check it and `clef stop` to stop it and disable automatic startup. These commands preserve your data.
 
 See [service controls, updates, and advanced configuration](INSTALLATION.md).
 
@@ -32,15 +32,27 @@ These are great products. Useful AI personal assistants are effectively operatin
 
 Those projects are awesome. So awesome that they are overwhelming! At least to me. I am aiming to build something that feels as approachable as the frontier labs products but without all the perverse incentives.
 
+## Chat and commands
+
+Type `/` to see commands. Keep typing to filter them. Use arrows to move, Enter to run, Tab to complete, or Escape to dismiss suggestions.
+
+- `/new` creates the server's new main conversation. Clients following main move to it.
+- `/switch` opens conversation history. Use `/switch <search>` to search by the first message. Main stays first, marked `✦`; other matches follow by recent activity. Switching affects only this TUI and leaves replies running. New terminal sessions open main.
+- `/settings` opens server configuration.
+
+Menus support typing to search, arrows to move, and Enter or Space to select. In search text, Space adds a space; use an arrow to focus the list before selecting with Space. Tab returns to the search field.
+
+Enter sends a message. Alt+Enter inserts a line break. Escape or `/stop` stops an active reply; Escape dismisses suggestions first. Ctrl+D or `/exit` closes the TUI without stopping the server.
+
 ## Settings
 
-Open **Settings** from chat. Use the grouped navigation to select **Default model**, **Connections**, **File access**, **Tools**, or **Account**. Save changes without closing the dialog. Use Close or Escape to return to chat.
+Type `/settings` in chat. Select **Default model**, **Connections**, **File access**, **Saved permissions**, or **Client access**. Client access is available only on the server host. Escape goes back; at the settings menu it returns to chat.
 
 Under **Connections**, select a provider to view its status and connection form. OpenAI offers ChatGPT sign-in and API-key entry. These methods share one OpenAI connection; connecting either method replaces the current one. ChatGPT subscription access and OpenAI API billing are separate.
 
 ### File access
 
-Open **Settings > File access** to add a server directory with **Read only** or **Read and write** access. Changes save immediately. Use **No access** to block a directory, or **Remove rule** to remove its rule. Removing a rule can expose a broader parent or global grant. Use **Refresh access** after a concurrent settings change.
+Open **Settings > File access** to add a server directory with **Read only** or **Read and write** access. Changes save immediately. Use **No access** to block a directory, or **Remove rule** to remove its rule. Removing a rule can expose a broader parent or global grant. Reopen File access after a concurrent settings change.
 
 Only the workspace is granted initially. Ask Clef to read or write a file elsewhere to request access in chat. Check the directory and access level before approving. Every file deletion needs its own approval. Moves and directory deletion are unavailable.
 
@@ -50,18 +62,21 @@ Only the workspace is granted initially. Ask Clef to read or write a file elsewh
 
 In setup or **Settings > Connections**, select **Ollama**. Enter the server URL, for example `http://localhost:11434` or `http://macstudio.local:11434`. Use the server root URL, without `/v1`. No API key is needed. Clef does not install Ollama or download models.
 
-The **Clef server**, not your browser, must be able to reach this URL. `localhost` means the computer that runs Clef. The selected Ollama server receives your conversation. Use unauthenticated HTTP only on a trusted network, never on a public endpoint. The internal OpenAI-client placeholder is not authentication and does not secure Ollama.
+The **Clef server**, not your terminal client, must be able to reach this URL. `localhost` means the computer that runs Clef. The selected Ollama server receives your conversation. Use unauthenticated HTTP only on a trusted network, never on a public endpoint. The internal OpenAI-client placeholder is not authentication and does not secure Ollama.
 
 Clef discovers installed local chat models. Embedding models and cloud aliases are not offered. Use an Ollama version that reports `thinking.values` from `/api/show` for thinking models. Only supported Clef thinking levels are offered. For boolean-only thinking controls, `medium` turns thinking on and `off` turns it off.
 
 Choose a model and thinking level in **Settings > Default model**. Changed defaults apply to your next message. An active reply keeps its current model. The server URL and defaults survive restarts. Changing the server URL changes the destination for all Ollama conversations. Connect again to refresh the installed model list. Clef also discovers models at startup; a discovery failure keeps your settings and is shown in Settings. Clef never switches providers to recover from a failure.
 
+## Remote servers
+
+Localhost is the default. To use another server, run `clef --server https://your-server` and enter a client token created on that server. Use HTTPS, including Tailscale Serve, or an SSH tunnel. See [remote setup](INSTALLATION.md#remote-connections).
+
 ## Features
 
-- **Local setup** - Install it on a macOS or Linux computer you control. Docker packaging and remote access are planned.
-- **Inline interfaces** - Ask Clef to show information as a card or collect answers in a form. The model chooses the layout and interprets your answers. Do not enter secrets. See [interface limits](ARCHITECTURE.md#model-composed-interfaces).
+- **Local or remote server** - Install on macOS or Linux. Keep the same terminal interface for local and remote connections. Docker packaging is planned.
 - **Self-extension (planned)** - Clef will be able to write extensions and small scripts. Code execution is disabled until resource limits are enforced.
-- **Self-configuration** - Clef can inspect model settings and request a model-default change. Approve changes in web chat, with an optional switch of that conversation. Connect providers through web settings. See [configuration limits](ARCHITECTURE.md#configuration-files-and-live-activation).
+- **Self-configuration** - Clef can inspect model settings and request a model-default change. Approve changes inline in terminal chat, with an optional switch of that conversation. Connect providers through `/settings`. See [configuration limits](ARCHITECTURE.md#configuration-files-and-live-activation).
 
 ## License
 

@@ -7,7 +7,6 @@ import type { Database } from '../platform/database.js';
 import type { Settings } from '../settings/index.js';
 import { configurationTools } from './configuration.js';
 import { fileTools } from './files.js';
-import { presentationExtension } from './presentation.js';
 import { AgentRepository } from './repository.js';
 import { Agent } from './service.js';
 
@@ -23,7 +22,6 @@ export async function openAgent(
   const registry = createRegistry();
   registry.install(configurationTools(settings, models, permissions));
   registry.install(fileTools(files));
-  registry.install(presentationExtension);
   const repository = await AgentRepository.open(database);
   const harness = await Harness.open(
     repository.storage,
