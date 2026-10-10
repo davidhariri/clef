@@ -136,7 +136,7 @@ it('shows file scopes and offers only Deny or This time for deletion', async () 
     await expect
       .poll(async () => (await client.request('/api/conversation', snapshotSchema)).busy)
       .toBe(false);
-    await expect.poll(() => terminal.text()).toContain('Private note');
+    await expect.poll(() => terminal.text()).toMatch(/Private\s+note/);
     terminal.type(
       `file ${JSON.stringify({
         operation: 'delete',
