@@ -57,7 +57,27 @@ export class Transcript extends Container {
   }
 }
 
+function fileScope(
+  request: Extract<
+    PermissionRequest,
+    {
+      kind: 'file';
+    }
+  >,
+): string {
+  const action = `Action: ${request.operation}\nFile path: ${request.path}`;
+  const provider = 'File contents read can be sent to your model provider.';
+  if (request.operation === 'delete')
+    return `${action}\nThis approves this file version only. Deletion cannot be undone. Future deletions need approval.\n${provider}`;
+  const access =
+    request.operation === 'read' || request.operation === 'list' ? 'Read only' : 'Read and write';
+  const size = request.bytes === undefined ? '' : `\nWrite size: ${request.bytes} bytes`;
+
+  return `${action}${size}\nDirectory: ${request.directory}\n${access}, including subdirectories.\nThis time permits only this action. Always saves this directory access. Never blocks this directory, except for more-specific rules.\n${provider}`;
+}
+
 function scope(request: PermissionRequest): string {
+  if ('kind' in request && request.kind === 'file') return fileScope(request);
   if ('kind' in request)
     return `Change model to ${request.defaults.provider}/${request.defaults.modelId}\nThinking: ${request.defaults.thinkingLevel}\n${request.switchConversation ? 'Switch this conversation and save defaults.' : 'Save defaults for the next message.'}\nConversation: ${request.conversationId}\nAlways and Never apply only to this exact model, thinking level, conversation, and switch choice.`;
   return `${request.method} ${request.url}\nSaved rule: ${request.method} ${request.origin}`;
@@ -82,7 +102,8 @@ export class Approval extends Container {
       this.restore();
       return;
     }
-    this.addChild(new Text(accent('Approval required'), 1, 0));
+    const deleting = 'kind' in request && request.kind === 'file' && request.operation === 'delete';
+    this.addChild(new Text(accent(deleting ? 'Delete this file?' : 'Approval required'), 1, 0));
     this.addChild(new Text(safeText(scope(request)), 1, 0));
     const choices: {
       value: PermissionChoice;
@@ -105,7 +126,10 @@ export class Approval extends Container {
         label: 'Never',
       },
     ];
-    const list = new SelectList(choices, 4, selectTheme);
+    const offered = deleting
+      ? choices.filter((choice) => choice.value === 'deny' || choice.value === 'once')
+      : choices;
+    const list = new SelectList(offered, 4, selectTheme);
     list.onSelect = (item) => {
       const choice = choices.find((entry) => entry.value === item.value);
       if (choice) this.decide(request.id, choice.value);

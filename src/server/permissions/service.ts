@@ -3,11 +3,18 @@ import { HttpError } from '../platform/http.js';
 import {
   type ConfigurationChange,
   type ConfigurationScope,
+  type FileAccess,
+  type FileAction,
+  type FileOperation,
+  fileAccessSchema,
+  fileActionSchema,
   type PermissionChoice,
   type PermissionRequest,
   type PermissionRule,
   permissionScopeKey,
+  requiresGlobalConfirmation,
 } from './contract.js';
+import { fileDecision, resolveDirectoryRules } from './files.js';
 import type { PermissionRepository } from './repository.js';
 
 type Waiting = {
@@ -26,6 +33,66 @@ export class Permissions {
     private readonly repository: PermissionRepository,
     private readonly lifetimeMs = 120_000,
   ) {}
+
+  async fileAccess() {
+    return this.repository.fileAccess();
+  }
+
+  private async checkFile(path: string, operation: FileOperation, ancestors: readonly string[]) {
+    const view = await this.repository.fileAccess();
+    if (view.error) throw new HttpError(409, 'Repair settings.yaml before accessing files.');
+    return {
+      ...view,
+      decision: fileDecision(view.policy, path, operation, ancestors),
+    };
+  }
+
+  async saveFileAccess(
+    policy: FileAccess,
+    revision: string,
+    confirmGlobal: boolean,
+  ): Promise<void> {
+    const checked = fileAccessSchema.parse(policy);
+    resolveDirectoryRules(checked.directories);
+    const view = await this.repository.fileAccess();
+    if (requiresGlobalConfirmation(view.policy, checked, confirmGlobal))
+      throw new HttpError(400, 'Confirm global host file access explicitly.');
+    await this.repository.saveFileAccess(checked, revision);
+    this.changed();
+  }
+
+  async authorizeFile(
+    conversationId: string,
+    callId: string,
+    action: FileAction,
+    ancestors: readonly string[],
+    signal: AbortSignal,
+  ): Promise<string> {
+    const checked = fileActionSchema.parse(action);
+    signal.throwIfAborted();
+    const view = await this.checkFile(checked.path, checked.operation, ancestors);
+    signal.throwIfAborted();
+    if (view.decision === 'deny') throw new HttpError(403, 'Access denied by a directory rule.');
+    if (view.decision === 'allow' && checked.operation !== 'delete') return view.revision;
+    return this.wait(
+      {
+        ...checked,
+        kind: 'file',
+        id: randomUUID(),
+        conversationId,
+        callId,
+        revision: view.revision,
+        expiresAt: Date.now() + this.lifetimeMs,
+      },
+      signal,
+    );
+  }
+
+  async assertFileRevision(revision: string): Promise<void> {
+    const view = await this.repository.fileAccess();
+    if (view.error || view.revision !== revision)
+      throw new HttpError(409, 'File permissions or settings changed. Request the action again.');
+  }
 
   pending(conversationId: string): PermissionRequest[] {
     return [
@@ -67,7 +134,9 @@ export class Permissions {
     if (rule?.decision === 'deny')
       throw new HttpError(403, 'Access denied by a saved permission rule.');
     if (rule?.decision === 'allow') return view.revision;
-    if (this.pending(conversationId).some((item) => 'kind' in item))
+    if (
+      this.pending(conversationId).some((item) => 'kind' in item && item.kind === 'configuration')
+    )
       throw new HttpError(409, 'A configuration approval is already pending.');
     return this.wait(
       {
@@ -154,15 +223,21 @@ export class Permissions {
       item.request.expiresAt <= Date.now()
     )
       throw new HttpError(409, 'This permission request is no longer active in this conversation.');
+    if (
+      'kind' in item.request &&
+      item.request.kind === 'file' &&
+      item.request.operation === 'delete' &&
+      (choice === 'always' || choice === 'never')
+    )
+      throw new HttpError(
+        400,
+        'Deletion requires approval for each action. Choose Deny or This time.',
+      );
     item.deciding = true;
     try {
       let revision = 'revision' in item.request ? item.request.revision : '';
       if (choice === 'always' || choice === 'never') {
-        revision = await this.repository.save(
-          this.ruleFor(item.request, choice === 'always' ? 'allow' : 'deny'),
-          revision || undefined,
-          item.signal,
-        );
+        revision = await this.saveDecision(item, choice);
       }
       item.signal.throwIfAborted();
       if (this.waiting.get(id) !== item)
@@ -175,7 +250,42 @@ export class Permissions {
     }
   }
 
-  private ruleFor(request: PermissionRequest, decision: 'allow' | 'deny'): PermissionRule {
+  private async saveDecision(item: Waiting, choice: 'always' | 'never'): Promise<string> {
+    const request = item.request;
+    if ('kind' in request && request.kind === 'file') {
+      const access =
+        choice === 'never'
+          ? 'deny'
+          : request.operation === 'read' || request.operation === 'list'
+            ? 'read'
+            : 'read-write';
+      if (request.directory === '/' && access === 'read-write')
+        throw new HttpError(403, 'Only Settings can enable global read/write access.');
+      return this.repository.saveFileRule(
+        {
+          path: request.directory,
+          access,
+        },
+        request.revision,
+        item.signal,
+      );
+    }
+    return this.repository.save(
+      this.ruleFor(request, choice === 'always' ? 'allow' : 'deny'),
+      'revision' in request ? request.revision : undefined,
+      item.signal,
+    );
+  }
+
+  private ruleFor(
+    request: Exclude<
+      PermissionRequest,
+      {
+        kind: 'file';
+      }
+    >,
+    decision: 'allow' | 'deny',
+  ): PermissionRule {
     if ('kind' in request)
       return {
         kind: 'configuration',

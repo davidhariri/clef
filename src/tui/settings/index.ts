@@ -4,6 +4,7 @@ import { okSchema, statusSchema } from '../../server/access/contract.js';
 import { settingsViewSchema } from '../../server/settings/contract.js';
 import type { Dialogs } from '../components/dialogs.js';
 import { clients } from './access.js';
+import { fileAccess } from './files.js';
 import { connections, defaultModel } from './models.js';
 
 async function permissions(client: ClefClient, dialogs: Dialogs) {
@@ -72,6 +73,11 @@ export async function settings(client: ClefClient, dialogs: Dialogs, signal: Abo
       value: 'connections',
       label: 'Connections',
       run: () => connections(client, dialogs, signal),
+    },
+    {
+      value: 'files',
+      label: 'File access',
+      run: () => fileAccess(client, dialogs),
     },
     {
       value: 'permissions',

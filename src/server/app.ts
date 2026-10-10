@@ -2,6 +2,7 @@ import type { Provider } from '@earendil-works/pi-ai';
 import { openAccess, registerAccessRoutes } from './access/index.js';
 import { openAgent } from './agent/index.js';
 import { openCredentials, registerCredentialRoutes } from './credentials/index.js';
+import { openFiles, registerFileRoutes } from './files/index.js';
 import { registerMessageRoutes } from './messages/index.js';
 import { openModels, registerModelRoutes } from './models/index.js';
 import { openPermissions } from './permissions/index.js';
@@ -23,7 +24,8 @@ export async function createApp(options: { home: string; providers?: readonly Pr
   );
   await settings.initialize((configuration) => models.validateConfiguration(configuration));
   const permissions = await openPermissions(installation.database, settings);
-  const agent = await openAgent(installation.database, models, settings, permissions);
+  const files = openFiles(installation.home, installation.workspacePath, permissions);
+  const agent = await openAgent(installation.database, models, settings, permissions, files);
 
   const server = await createHttpServer();
 
@@ -31,6 +33,7 @@ export async function createApp(options: { home: string; providers?: readonly Pr
   registerCredentialRoutes(server, credentials);
   registerModelRoutes(server, models);
   registerSettingsRoutes(server, settings);
+  registerFileRoutes(server, files);
   registerMessageRoutes(server, agent, models, permissions);
 
   server.addHook('onClose', async () => {

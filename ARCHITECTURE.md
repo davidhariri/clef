@@ -37,6 +37,7 @@ src/server/
   access/                    Local authentication and revocable remote clients
   credentials/               Installation key, encrypted provider credentials, recovery
   permissions/               Pending approvals and saved access rules
+  files/                     Checked file operations and directory access settings
   settings/                  Configuration validation, persistence, and activation
   models/                    Provider connections and model selection
   agent/                     Pi Durable and restricted execution integration
@@ -158,17 +159,37 @@ Use local SQLite for structured runtime state, including client-token hashes, en
 
 Keep skills, active projects, notes, and other files in a persistent folder or volume. Keep the database separate from the file workspace. Database, configuration, key, and workspace must survive package replacement. Use a SQLite-safe backup method, not a copy of only the active main database file.
 
+### File access
+
+The files feature owns filesystem operations. The permissions feature owns directory policy and approvals. `files_access` returns the workspace root and current policy. `files` lists a directory, reads UTF-8 text, creates or replaces a file, creates one directory, or deletes one ordinary file. Relative paths start in the workspace. External paths must be canonical and absolute. Parent directories must exist. There is no move, rename, recursive delete, link, shell, or execution operation.
+
+The `files` section of `settings.yaml` stores `global` and `directories`. Each directory has a canonical `path` and `access`: `read`, `read-write`, or `deny`. The most specific matching directory wins, including under global access. A directory rule includes its descendants. An unmatched path needs approval unless global access is on. A read-only rule requires a separate approval for a write. A deny rule blocks requests without another prompt. New installations start with only workspace read/write access. On startup, a valid older settings file without the `files` section receives that initial policy once. Existing models and permission rules are preserved. An empty directory list remains empty after restart.
+
+A missing grant pauses the exact file operation. The approval shows its path, operation, directory scope, and access level. This time permits only the pending operation. Always saves the shown directory grant. Never saves a deny rule for that directory. More-specific directory rules still take precedence. File deletions offer only Deny and This time, even for workspace or global access. They cannot receive a saved approval. Deletion is limited to one ordinary file. Read/write permission includes replacing or truncating file contents without a separate deletion approval.
+
+Each approval binds the calling conversation, tool task, settings revision, and target file version. Write requests also bind the byte count and content hash. Before execution, check the current settings revision and target again. A cancelled, expired, changed, or restarted request cannot authorize a later operation. File operations use unsafe replay policy; recovery does not repeat them automatically. A stop cannot undo completed work.
+
+`GET /api/files/access` returns the workspace, policy, revision, and configuration error. Authenticated `PUT /api/files/access` changes the policy with a current revision. New and changed directory entries must resolve to existing directories. Enabling global access requires `confirmGlobal: true`. The full settings replacement API requires the same confirmation. A root read/write directory grant is rejected; use the global setting. The agent has no tool to change this setting or grant itself access.
+
+Global access is off by default. It applies to the filesystem visible to the server, subject to OS permissions. In a container or VM, this includes exposed mounts, not all files on the physical computer. File tools always block Clef's installation files outside the workspace, its installed code, and `/dev`, `/proc`, and `/sys`. Broad write access can still change other executable or startup files. A restricted script runtime does not make global filesystem access safe.
+
+Path checks reject parent traversal, symbolic links in path components, hard-linked files, and special files. Existing directory scopes, protected roots, and workspace quotas use directory identities, not path spelling alone. This covers case aliases and alternate mount paths. Conflicting rules for the same directory fail closed. Reads open with no-follow and nonblocking flags and check the opened file. Writes use a private temporary file and atomic replacement in the destination directory. File changes flush their parent directory. These checks restrict model-supplied paths; they are not an OS sandbox. They assume trusted local processes. Node path checks cannot prevent a hostile local process from replacing an ancestor directory between a check and an operation. Do not expose adversarial filesystem writers or untrusted host code. Stronger protection requires race-resistant native operations or OS isolation.
+
+Reads return at most 64 KiB with a byte offset for the next chunk. Writes accept at most 64 KiB. Listings stop at 200 entries or 64 KiB and report truncation; they are not recursive. A tool result is at most 512 KiB after JSON encoding. At most eight file actions can be active. Tool writes keep the workspace within 64 MiB and 10000 entries; quota scans stop at these bounds. External grants have per-operation limits but no aggregate disk quota. Approval waits use the existing expiry and pending-request limits. Bounds apply before accumulating unbounded file contents or directory listings.
+
+Future Pi Codemode calls must use this same checked file interface. Codemode remains disabled until its own resource limits are ready. File contents are untrusted data, not permission grants or host code.
+
 ### Configuration files and live activation
 
 `settings.yaml` in the installation directory is the source of truth for model defaults, provider references, the Ollama URL, and saved permission rules. Settings owns file operations. Models and permissions own their schemas. Credentials remain in the shared encrypted secret store. A reference does not grant access to a secret.
 
-The file accepts version 1 with `models` and `permissions` sections. It must be a regular file of at most 64 KiB. Reject symlinks, YAML aliases, duplicate keys, unknown fields, and unknown tags. Cloud references must use `provider:<id>` for the same registered provider. Ollama uses a canonical HTTP or HTTPS URL without a secret reference.
+The file accepts version 1 with `models`, `permissions`, and `files` sections. It must be a regular file of at most 64 KiB. Reject symlinks, YAML aliases, duplicate keys, unknown fields, and unknown tags. Cloud references must use `provider:<id>` for the same registered provider. Ollama uses a canonical HTTP or HTTPS URL without a secret reference.
 
 Reads load changes lazily. Validate the complete replacement before activation. A failed reload keeps the last valid snapshot, returns a safe diagnostic, and blocks writes until repair. Invalid initial configuration prevents startup. Reloads do not restart the server or interrupt model streams. New model selections require an available model and a supported thinking level. A saved unavailable model remains explicit; do not switch to another provider.
 
 Clients can inspect `/api/settings`, validate YAML through `/api/settings/validate`, and replace it with `PUT /api/settings`. Replacement requires the current revision. Writes are serialized, validated, flushed, and renamed. A second revision check detects external edits before replacement. External editors do not join the write queue: do not edit a file at the same time as an API or tool write. The final check and rename are not a cross-process transaction.
 
-The agent has two trusted configuration tools, not general file access:
+The agent has two trusted configuration tools. File tools cannot replace these operations:
 
 - `settings_inspect` returns validated non-secret model configuration, revision, safe diagnostic, saved-rule count, and at most 20 model choices. Results over 16 KiB are rejected before returning to the harness.
 - `settings_change` accepts only a revision, exact model defaults, and a switch option for the calling conversation. It cannot change permissions, endpoints, references, credentials, or another conversation. Its acknowledgement is bounded to 1 KiB.
@@ -177,7 +198,7 @@ Every change requires authenticated approval unless an exact saved rule applies.
 
 An approved switch uses Pi Durable's conversation configuration operation. It changes the next model request, not the current generation. Saving defaults and switching the conversation are separate durable writes. An interruption can leave new defaults saved without switching the active reply. Those defaults still apply to the next user message. Mutating tools use unsafe replay policy: recovery does not repeat the action automatically. Inspect settings and conversation before retrying.
 
-Generic secret references, extension configuration, and scoped file tools remain planned. Keep authentication, permission checks, and storage ownership outside replaceable configuration.
+Generic secret references and extension configuration remain planned. Keep authentication, permission checks, and storage ownership outside replaceable configuration.
 
 ## Code execution and permissions
 
@@ -196,7 +217,7 @@ Deny external access by default. Show the action, destination, and exact scope t
 
 Store persistent rules in configuration files. Users can inspect and revoke them in Settings. Scripts cannot grant themselves permissions. Bind approvals to pending actions; reject cancelled and expired requests. Check destinations and redirects before network requests. Approval of an MCP URL is not approval of all its tools; Clef cannot enforce its sandbox inside an independent MCP server.
 
-Only the two bounded configuration tools are enabled. Keep scripts, shell tools, general file tools, network tools, and imported extensions disabled until required bounds are tested. Bound execution time, guest memory, output before host accumulation, return values, and host-call work. Permission waits expire. Cancellation signals tools and cancels approvals but cannot undo completed side effects. Do not blindly replay interrupted scripts.
+Only bounded configuration and file tools are enabled. Keep scripts, shell tools, network tools, and imported extensions disabled until required bounds are tested. Bound execution time, guest memory, output before host accumulation, return values, and host-call work. Permission waits expire. Cancellation signals tools and cancels approvals but cannot undo completed side effects. Do not blindly replay interrupted scripts.
 
 ### Future VM workers
 

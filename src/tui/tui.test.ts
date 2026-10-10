@@ -1,10 +1,14 @@
 import { once } from 'node:events';
+import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { testApplication } from '../../tests/installation.js';
 import { TestTerminal } from '../../tests/terminal.js';
 import { ClefClient } from '../client/index.js';
 import { okSchema } from '../server/access/contract.js';
+import { fileAccessViewSchema } from '../server/files/contract.js';
 import { snapshotSchema } from '../server/messages/contract.js';
 import { runTui } from './index.js';
 
@@ -31,6 +35,136 @@ async function testChat(connect = true) {
     },
   };
 }
+
+it('manages directory rules and requires explicit confirmation for global file access', async () => {
+  const chat = await testChat();
+  const { terminal, client } = chat;
+  const directory = await realpath(await mkdtemp(join(tmpdir(), 'clef-tui-files-')));
+  const access = () => client.request('/api/files/access', fileAccessViewSchema);
+  try {
+    await expect.poll(() => terminal.text()).toContain('Ready');
+    terminal.type('/settings');
+    terminal.input('\r');
+    await expect.poll(() => terminal.text()).toContain('Default model');
+    terminal.type('File access');
+    terminal.input('\r');
+    await expect.poll(() => terminal.text()).toContain('Add directory');
+    terminal.input('\r');
+    await expect.poll(() => terminal.text()).toContain('Directory path');
+    terminal.type(directory);
+    terminal.input('\r');
+    await expect.poll(() => terminal.text()).toContain('Directory access');
+    terminal.input('\r');
+    await expect
+      .poll(async () => (await access()).policy.directories)
+      .toContainEqual({
+        path: directory,
+        access: 'read',
+      });
+    await expect.poll(() => terminal.text()).toContain('Add directory');
+    terminal.type(directory);
+    terminal.input('\r');
+    await expect.poll(() => terminal.text()).toContain('Remove rule');
+    terminal.type('No access');
+    terminal.input('\r');
+    await expect
+      .poll(async () => (await access()).policy.directories)
+      .toContainEqual({
+        path: directory,
+        access: 'deny',
+      });
+    await expect.poll(() => terminal.text()).toContain('Add directory');
+    terminal.type(directory);
+    terminal.input('\r');
+    await expect.poll(() => terminal.text()).toContain('Remove rule');
+    terminal.type('Remove rule');
+    terminal.input('\r');
+    await expect.poll(() => terminal.text()).toContain('Remove directory rule?');
+    terminal.input('\u001b[B');
+    terminal.input(' ');
+    await expect
+      .poll(async () => (await access()).policy.directories.some((rule) => rule.path === directory))
+      .toBe(false);
+    await expect.poll(() => terminal.text()).toContain('Add directory');
+    terminal.type('Enable global access');
+    terminal.input('\r');
+    await expect.poll(() => terminal.text()).toContain('Enable global host file access?');
+    expect((await access()).policy.global).toBe(false);
+    terminal.input('\u001b');
+    await expect.poll(() => terminal.text()).toContain('Add directory');
+    expect((await access()).policy.global).toBe(false);
+    terminal.type('Enable global access');
+    terminal.input('\r');
+    await expect.poll(() => terminal.text()).toContain('Enable global host file access?');
+    terminal.input('\u001b[B');
+    terminal.input(' ');
+    await expect.poll(async () => (await access()).policy.global).toBe(true);
+    await expect.poll(() => terminal.text()).toContain('Disable global access');
+    terminal.type('Disable global access');
+    terminal.input('\r');
+    await expect.poll(async () => (await access()).policy.global).toBe(false);
+  } finally {
+    await chat.close();
+    await rm(directory, {
+      recursive: true,
+      force: true,
+    });
+  }
+});
+
+it('shows file scopes and offers only Deny or This time for deletion', async () => {
+  const chat = await testChat();
+  const { terminal, client } = chat;
+  const directory = await realpath(await mkdtemp(join(tmpdir(), 'clef-tui-approval-')));
+  const path = join(directory, 'note.txt');
+  await writeFile(path, 'Private note');
+  try {
+    await expect.poll(() => terminal.text()).toContain('Ready');
+    terminal.type(
+      `file ${JSON.stringify({
+        operation: 'read',
+        path,
+      })}`,
+    );
+    terminal.input('\r');
+    await expect.poll(() => terminal.text()).toContain('Always saves this directory access');
+    expect(terminal.text()).toContain(directory);
+    expect(terminal.text()).toContain('Read only');
+    terminal.input('\u001b[B');
+    terminal.input('\u001b[B');
+    terminal.input('\r');
+    await expect
+      .poll(async () => (await client.request('/api/conversation', snapshotSchema)).busy)
+      .toBe(false);
+    await expect.poll(() => terminal.text()).toContain('Private note');
+    terminal.type(
+      `file ${JSON.stringify({
+        operation: 'delete',
+        path,
+      })}`,
+    );
+    terminal.input('\r');
+    await expect.poll(() => terminal.visibleLines().join('\n')).toContain('Delete this file?');
+    expect(
+      terminal.visibleLines().some((line) => line.trim() === 'Always' || line.trim() === 'Never'),
+    ).toBe(false);
+    expect(terminal.visibleLines().join('\n')).toContain('Deletion cannot be undone');
+    terminal.input('\u001b[B');
+    terminal.input('\r');
+    await expect
+      .poll(async () => (await client.request('/api/conversation', snapshotSchema)).busy)
+      .toBe(false);
+    await expect(readFile(path)).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+  } finally {
+    await chat.close();
+    await rm(directory, {
+      recursive: true,
+      force: true,
+    });
+  }
+});
 
 it('animates six-dot working frames in the composer border and shows the Clef symbol in the header', async () => {
   const chat = await testChat();
